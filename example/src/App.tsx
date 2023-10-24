@@ -1,31 +1,30 @@
-import * as React from 'react';
+import React, { useMemo } from 'react'
+import { Button, SafeAreaView, Text } from 'react-native'
 
-import { StyleSheet, View, Text } from 'react-native';
-import { multiply } from 'react-native-ble-library';
+import { BleManagerFactory, BleManagerProvider, useBleManager } from '@iotinga/react-native-ble-library'
 
-export default function App() {
-  const [result, setResult] = React.useState<number | undefined>();
-
-  React.useEffect(() => {
-    multiply(3, 7).then(setResult);
-  }, []);
+function ExampleComponent() {
+  const [bleState, bleManager] = useBleManager()
+  console.log(bleState)
 
   return (
-    <View style={styles.container}>
-      <Text>Result: {result}</Text>
-    </View>
-  );
+    <SafeAreaView>
+      <Text>READY: {bleState.ready.toString()}</Text>
+      <Text>SCAN: {bleState.scan.state}</Text>
+      {bleState.scan.state === 'scanning' &&
+        bleState.scan.discoveredDevices.map((device) => <Text key={device.id}>{device.name}</Text>)}
+      <Button onPress={() => bleManager.scan([])} title="SCAN" />
+      <Text>CONNECT: {bleState.connection.state}</Text>
+    </SafeAreaView>
+  )
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  box: {
-    width: 60,
-    height: 60,
-    marginVertical: 20,
-  },
-});
+export default function App() {
+  const bleManager = useMemo(() => new BleManagerFactory().create(), [])
+
+  return (
+    <BleManagerProvider manager={bleManager}>
+      <ExampleComponent />
+    </BleManagerProvider>
+  )
+}
