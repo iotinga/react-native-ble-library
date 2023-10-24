@@ -96,7 +96,7 @@ export class BleManager implements IBleManager {
           connection: {
             ...this.state.connection,
             state: 'connected',
-          }
+          },
         }
         break
       case 'charValueChanged':
@@ -110,7 +110,7 @@ export class BleManager implements IBleManager {
                 ...this.state.connection.services[event.service],
                 [event.characteristic]: {
                   ...this.state.connection.services[event.service]?.[event.characteristic]!,
-                  value: event.value
+                  value: event.value,
                 },
               },
             },
@@ -128,7 +128,7 @@ export class BleManager implements IBleManager {
                 ...this.state.connection.services[event.service],
                 [event.characteristic]: {
                   ...this.state.connection.services[event.service]?.[event.characteristic]!,
-                  state: 'subscribed'
+                  state: 'subscribed',
                 },
               },
             },
@@ -146,7 +146,7 @@ export class BleManager implements IBleManager {
                 ...this.state.connection.services[event.service],
                 [event.characteristic]: {
                   ...this.state.connection.services[event.service]?.[event.characteristic]!,
-                  state: 'none'
+                  state: 'none',
                 },
               },
             },
@@ -156,7 +156,10 @@ export class BleManager implements IBleManager {
       case 'error':
         this.state = {
           ...this.state,
-          error: event.error,
+          error: {
+            code: event.error,
+            message: event.message,
+          },
         }
         break
     }
@@ -201,7 +204,7 @@ export class BleManager implements IBleManager {
     this.state.scan.discoveredDevices = []
     this.state.scan.serviceUuids = serviceUuid
     this.notify()
-    this.nativeInterface.sendCommands([{ type: 'scan', serviceUuid }])
+    this.nativeInterface.sendCommands([{ type: 'scan', serviceUuids: serviceUuid }])
   }
 
   stopScan(): void {

@@ -4,11 +4,6 @@ export enum BleErrorCode {
   InvalidState = 'BleInvalidState',
 }
 
-export type BleError = {
-  error: BleErrorCode
-  message: string
-}
-
 export type BleDeviceInfo = {
   /** ID of the device. On Android this is a MAC address, on iOS it's an opaque UUID */
   id: string
@@ -66,7 +61,10 @@ export type BleManagerState = {
     rssi: number
     services: Record<string, Record<string, CharacteristicState>>
   }
-  error?: BleError
+  error?: {
+    code: BleErrorCode
+    message: string
+  }
 }
 
 export interface IBleManager {
@@ -85,17 +83,18 @@ export interface IBleManager {
 
 export type BleCommand =
   | { type: 'ping' }
-  | { type: 'scan'; serviceUuid: string[] }
+  | { type: 'scan'; serviceUuids: string[] }
   | { type: 'stopScan' }
-  | { type: 'connect'; id: string }
+  | { type: 'connect'; id: string; mtu: number }
   | { type: 'disconnect' }
-  | { type: 'write'; service: string; characteristic: string; value: Buffer }
+  | { type: 'write'; service: string; characteristic: string; value: Buffer; maxSize?: number }
   | { type: 'read'; service: string; characteristic: string }
   | { type: 'subscribe'; service: string; characteristic: string }
+  | { type: 'unsubscribe'; service: string; characteristic: string }
 
 export type BleEvent =
   | { type: 'pong' }
-  | { type: 'error'; error: BleError }
+  | { type: 'error'; error: BleErrorCode; message: string }
   | { type: 'scanResult'; device: BleDeviceInfo }
   | { type: 'scanStopped' }
   | { type: 'scanStarted' }
