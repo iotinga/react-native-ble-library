@@ -5,27 +5,13 @@ A library to interact with BLE devices from React Native
 ## Installation
 
 ```sh
-npm install react-native-ble-library
+npm install @iotinga/react-native-ble-library
 ```
+
+## Project structure
+
+- `library/` contains the RN library code
+- `example/` contains an application example that uses the library
 
 ## Usage
 
-```js
-import { multiply } from 'react-native-ble-library';
-
-// ...
-
-const result = await multiply(3, 7);
-```
-
-## Contributing
-
-See the [contributing guide](CONTRIBUTING.md) to learn how to contribute to the repository and the development workflow.
-
-## License
-
-MIT
-
----
-
-Made with [create-react-native-library](https://github.com/callstack/react-native-builder-bob)
