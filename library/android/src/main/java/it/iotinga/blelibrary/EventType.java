@@ -10,8 +10,11 @@ public enum EventType {
   SCAN_STARTED("scanStarted"),
   CONNECTED("connected"),
   DISCONNECTED("disconnected"),
-  SUBSCRIBE("subscribe"),
+  SUBSCRIBED("subscribed"),
+  UNSUBSCRIBED("unsubscribed"),
   CHAR_VALUE_CHANGED("charValueChanged"),
+  READ_PROGRESS("readProgress"),
+  READ_COMPLETED("readCompleted"),
   WRITE_COMPLETED("writeCompleted"),
   WRITE_PROGRESS("writeProgress"),
   MTU_CHANGED("mtuChanged");

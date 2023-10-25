@@ -15,105 +15,154 @@ export type BleDeviceInfo = {
   rssi: number
 }
 
-export interface IBleCharacteristic {
-  readonly uuid: string
-
-  read(): Promise<Buffer>
-  write(value: Buffer): Promise<void>
-  subscribe(onChange: (data: Buffer) => void): Promise<{ unsubscribe: () => Promise<void> }>
+export enum BleCharacteristicState {
+  None = 'none',
+  Reading = 'reading',
+  Writing = 'writing',
+  Ready = 'ready',
 }
 
-export interface IBleService {
-  readonly uuid: string
-
-  getCharacteristic(uuid: string): IBleCharacteristic | null
+export type BleProgressIndication = {
+  current: number
+  total: number
 }
 
-export interface IBleDevice {
-  readonly id: string
-
-  getService(uuid: string): IBleService | null
-  disconnect(): Promise<void>
-}
-
-export type CharacteristicState = {
-  state: 'none' | 'reading' | 'writing' | 'ready' | 'subscribed' | 'subscribing'
+export type BleCharacteristic = {
+  state: BleCharacteristicState
+  subscribed: boolean
   value?: Buffer
-  writeProgress?: {
-    current: number
-    total: number
-  }
+  writeProgress?: BleProgressIndication
+  readProgress?: BleProgressIndication
+}
+
+export enum BleScanState {
+  Stopped = 'stopped',
+  Scanning = 'scanning',
+  Starting = 'starting',
+  Stopping = 'stopping',
+}
+
+export enum BleConnectionState {
+  Disconnected = 'disconnected',
+  Connecting = 'connecting',
+  Connected = 'connected',
+  Disconnecting = 'disconnecting',
 }
 
 export type BleManagerState = {
+  /** true if the module is ready and connected with the native driver */
   ready: boolean
   permission: {
     granted: boolean | null
   }
   scan: {
-    state: 'starting' | 'scanning' | 'stopping' | 'stopped'
-    serviceUuids: string[]
+    state: BleScanState
+    serviceUuids?: string[]
     discoveredDevices: BleDeviceInfo[]
   }
   connection: {
-    state: 'disconnected' | 'connecting' | 'connected' | 'disconnecting'
+    state: BleConnectionState
     id: string
     rssi: number
-    services: Record<string, Record<string, CharacteristicState>>
   }
   error?: {
     code: BleErrorCode
     message: string
   }
+  services: Record<string, Record<string, BleCharacteristic>>
+}
+
+export type IBleChar = {
+  getServiceUuid(): string
+  getCharUuid(): string
+  getChunkSize(): number | undefined
+  getSize(): number | undefined
 }
 
 export interface IBleManager {
+  /**
+   * If the BLE permissions are not already granted asks the user for them,
+   * depending on the user platform.
+   */
+  askPermissions(): Promise<boolean>
+
+  /**
+   * Registers a callback that is invoked each time the BleManager state changes.
+   * Typically only used internally by hooks.
+   */
   onStateChange(callback: (state: BleManagerState) => void): () => void
+
+  /**
+   * Get the current BleManager state.
+   */
   getState(): BleManagerState
 
-  scan(serviceUuid: string[]): void
-  stopScan(): void
+  /**
+   * Start a BLE scan for the devices that expose the specified services.
+   */
+  scan(serviceUuid?: string[]): Promise<void>
 
-  connect(id: string): void
-  disconnect(): void
-  read(service: string, characteristic: string): void
-  write(service: string, characteristic: string, value: Buffer): void
-  subscribe(service: string, characteristic: string): void
+  /**
+   * Stops the scan, if previously started.
+   */
+  stopScan(): Promise<void>
+
+  /**
+   * Connects to the device with the specified id (that is returned by the scan).
+   * If mtu is specified the manager tries to request the specified MTU for the
+   * device (if allowed by the operating system), otherwise the default (that
+   * depends on the OS implementation) is used.
+   */
+  connect(id: string, mtu?: number): Promise<void>
+
+  /**
+   * Disconnects a previously connected device.
+   */
+  disconnect(): Promise<void>
+
+  /**
+   * Request a read for the specified characteristics. If the characteristic has a
+   * fixed size then multiple reads are performed till all the data associated with
+   * the characteristic is received.
+   */
+  read(characteristic: IBleChar): Promise<void>
+
+  /**
+   * Requests a write for the specified characteristic. If the characteristic is chunked the
+   * write is split in chunks of chunkSize. The characteristic is then written multiple times till
+   * all the message is transmitted.
+   * From one write to another we wait for the device to send an ACK to confirm it has
+   * received the message chunk.
+   */
+  write(characteristic: IBleChar, value: Buffer): Promise<void>
+
+  /**
+   * Subscribes for notification of the specified (service, characteristic). Each time the
+   * characteristic changes the state is automatically updated accordingly.
+   */
+  subscribe(characteristic: IBleChar): Promise<void>
+
+  /**
+   * Removes a previously set subscription for (service, characteristic)
+   */
+  unsubscribe(characteristic: IBleChar): Promise<void>
+
+  /**
+   * Call this method after having used the BleManager to release all the resources
+   */
+  dispose(): void
 }
 
-export type BleCommand =
-  | { type: 'ping' }
-  | { type: 'scan'; serviceUuids: string[] }
-  | { type: 'stopScan' }
-  | { type: 'connect'; id: string; mtu: number }
-  | { type: 'disconnect' }
-  | { type: 'write'; service: string; characteristic: string; value: Buffer; maxSize?: number }
-  | { type: 'read'; service: string; characteristic: string }
-  | { type: 'subscribe'; service: string; characteristic: string }
-  | { type: 'unsubscribe'; service: string; characteristic: string }
-
-export type BleEvent =
-  | { type: 'pong' }
-  | { type: 'error'; error: BleErrorCode; message: string }
-  | { type: 'scanResult'; device: BleDeviceInfo }
-  | { type: 'scanStopped' }
-  | { type: 'scanStarted' }
-  | { type: 'connected'; id: string; rssi: number }
-  | { type: 'disconnected' }
-  | { type: 'subscribe'; service: string; characteristic: string }
-  | { type: 'charValueChanged'; service: string; characteristic: string; value: Buffer }
-  | { type: 'writeCompleted'; service: string; characteristic: string }
-  | { type: 'writeProgress'; service: string; characteristic: string; current: number; total: number }
-
-export interface INativeBleInterface {
-  sendCommands(commands: BleCommand[]): Promise<void>
-  addListener(listener: (event: BleEvent) => void): () => void
+export type DemoState = {
+  services: Record<string, Record<string, BleCharacteristic>>
+  devices: BleDeviceInfo[]
 }
 
 export interface IBleManagerFactory {
   create(): IBleManager
 }
 
-export interface IBleNativeModule {
-  sendCommands(commands: BleCommand[]): Promise<void>
+export interface IPermissionManager<T> {
+  askPermission(permission: T | T[]): Promise<boolean>
+  hasPermission(permission: T | T[]): Promise<boolean>
 }

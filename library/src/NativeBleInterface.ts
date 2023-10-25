@@ -1,5 +1,5 @@
 import { NativeEventEmitter } from 'react-native'
-import type { BleCommand, BleEvent, IBleNativeModule, INativeBleInterface } from './types'
+import type { BleCommand, BleEvent, IBleNativeModule, INativeBleInterface } from './interface'
 
 export class NativeBleInterface implements INativeBleInterface {
   constructor(private readonly nativeModule: IBleNativeModule, private readonly eventEmitter: NativeEventEmitter) {}

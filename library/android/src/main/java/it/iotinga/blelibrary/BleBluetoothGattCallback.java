@@ -1,15 +1,16 @@
 package it.iotinga.blelibrary;
 
-import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothProfile;
 import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
+import androidx.annotation.RequiresPermission;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
@@ -29,12 +30,18 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     this.connectionContext = connectionContext;
   }
 
-  @SuppressLint("MissingPermission")
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
   public void onConnectionStateChange(@NonNull BluetoothGatt gatt, int status, int newState) {
-    super.onConnectionStateChange(gatt, status, newState);
+    Log.d(TAG, "onConnectionStateChange - status: " + status + ", newState: " + newState);
 
-    Log.i(TAG, "connection state changed from " + status + " to " + newState);
+    if (newState == BluetoothProfile.STATE_CONNECTING) {
+      Log.i(TAG, "connecting to device...");
+    }
+
+    if (newState == BluetoothProfile.STATE_DISCONNECTING) {
+      Log.i(TAG, "disconnecting from device...");
+    }
 
     if (newState == BluetoothProfile.STATE_CONNECTED) {
       Integer requestMtu = connectionContext.getRequestedMtu();
@@ -49,38 +56,54 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
 
     if (newState == BluetoothProfile.STATE_DISCONNECTED) {
       eventEmitter.emit(EventType.DISCONNECTED);
-      connectionContext.setConnectionState(ConnectionState.DISCONNECTED);
-      connectionContext.setGattLink(null);
-      connectionContext.setRequestedMtu(null);
+      connectionContext.reset();
     }
   }
 
-  @SuppressLint("MissingPermission")
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
+  @Override
   public void onMtuChanged(@NonNull BluetoothGatt gatt, int mtu, int status) {
-    Log.i(TAG, "MTU set to: " + mtu + "(status: " + status + ")");
+    Log.d(TAG, "onMtuChanged - status: " + status + ", mtu: " + mtu);
 
-    WritableMap payload = Arguments.createMap();
-    payload.putInt("mtu", mtu);
-    eventEmitter.emit(EventType.MTU_CHANGED, payload);
-    connectionContext.setConnectionState(ConnectionState.DISCOVERING_SERVICES);
-    gatt.discoverServices();
+    if (status == BluetoothGatt.GATT_SUCCESS) {
+      Log.i(TAG, "MTU set to: " + mtu);
+
+      WritableMap payload = Arguments.createMap();
+      payload.putInt("mtu", mtu);
+      eventEmitter.emit(EventType.MTU_CHANGED, payload);
+      connectionContext.setConnectionState(ConnectionState.DISCOVERING_SERVICES);
+      gatt.discoverServices();
+    } else {
+      Log.w(TAG, "cannot set MTU, status: " + status);
+
+      // reset the connection
+      gatt.disconnect();
+    }
   }
 
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
   public void onServicesDiscovered(@NonNull BluetoothGatt gatt, int status) {
+    Log.d(TAG, "onServiceDiscovered - status: " + status);
+
     if (status == BluetoothGatt.GATT_SUCCESS) {
       Log.i(TAG, "service discovery ok");
 
       eventEmitter.emit(EventType.CONNECTED);
       connectionContext.setConnectionState(ConnectionState.CONNECTED);
     } else {
-      Log.e(TAG, "service discovery error");
+      Log.w(TAG, "service discovery error");
+
+      // from this point I think that is best to reset the connection
+      gatt.disconnect();
     }
   }
 
-  @SuppressLint("MissingPermission")
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
   public void onCharacteristicWrite(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, int status) {
+    Log.d(TAG, "onCharacteristicWrite - status: " + status);
+
     String serviceUuid = characteristic.getService().getUuid().toString();
     String charUuid = characteristic.getUuid().toString();
 
@@ -123,20 +146,47 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
   }
 
   @Override
-  public void onCharacteristicRead(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, @NonNull byte[] value, int status) {
+  public void onCharacteristicRead(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, int status) {
+    Log.d(TAG, "onCharacteristicRead - status: " + status);
+
+    String serviceUuid = characteristic.getService().getUuid().toString();
+    String charUuid = characteristic.getUuid().toString();
+
+    WritableMap payload = Arguments.createMap();
+    payload.putString("service", serviceUuid);
+    payload.putString("characteristic", charUuid);
+
     if (status == BluetoothGatt.GATT_SUCCESS) {
-      WritableMap payload = Arguments.createMap();
-      payload.putString("service", characteristic.getService().getUuid().toString());
-      payload.putString("characteristic", characteristic.getUuid().toString());
-      payload.putString("value", b64Encoder.encodeToString(value));
-      eventEmitter.emit(EventType.CHAR_VALUE_CHANGED, payload);
+      ChunkedReadComposer chunkedRead = connectionContext.getChunkedRead(charUuid);
+      if (chunkedRead != null) {
+        chunkedRead.putChunk(characteristic.getValue());
+
+        if (chunkedRead.hasMoreChunks()) {
+          // need to receive more chunks, emit progress event
+          payload.putInt("current", chunkedRead.getReceivedBytes());
+          payload.putInt("total", chunkedRead.getTotalBytes());
+          eventEmitter.emit(EventType.READ_COMPLETED, payload);
+        } else {
+          // chunked read has finished, emit final event
+          payload.putString("value", b64Encoder.encodeToString(chunkedRead.getBytes()));
+          eventEmitter.emit(EventType.CHAR_VALUE_CHANGED, payload);
+          connectionContext.setChunkedRead(charUuid, null);
+        }
+      } else {
+        // normal read, send response
+        payload.putString("value", b64Encoder.encodeToString(characteristic.getValue()));
+        eventEmitter.emit(EventType.READ_COMPLETED, payload);
+      }
     } else {
-      eventEmitter.emitError(ErrorType.READ_ERROR, "native status: " + status);
+      eventEmitter.emitError(ErrorType.READ_ERROR, "native status: " + status, payload);
+      connectionContext.setChunkedRead(charUuid, null);
     }
   }
 
   @Override
   public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, @NonNull byte[] value) {
+    Log.d(TAG, "onCharacteristicChanged");
+
     WritableMap payload = Arguments.createMap();
     payload.putString("service", characteristic.getService().getUuid().toString());
     payload.putString("characteristic", characteristic.getUuid().toString());

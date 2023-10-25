@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 
+import androidx.annotation.RequiresPermission;
+
 import com.facebook.react.bridge.ReadableMap;
 
 public class CommandScanStop implements Command {
@@ -15,7 +17,7 @@ public class CommandScanStop implements Command {
     this.scanCallback = scanCallback;
   }
 
-  @SuppressLint("MissingPermission")
+  @RequiresPermission(value = "android.permission.BLUETOOTH_SCAN")
   @Override
   public void execute(ReadableMap command) {
     bluetoothLeScanner.stopScan(scanCallback);

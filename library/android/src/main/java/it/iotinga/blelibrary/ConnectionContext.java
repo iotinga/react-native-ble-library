@@ -10,6 +10,7 @@ public class ConnectionContext {
   private BluetoothGatt gattLink;
   private Integer requestedMtu;
   private final Map<String, ChunkedWriteSplitter> writeChunks = new HashMap<>();
+  private final Map<String, ChunkedReadComposer> readChunks = new HashMap<>();
 
   public ConnectionState getConnectionState() {
     return this.state;
@@ -45,5 +46,25 @@ public class ConnectionContext {
 
   public ChunkedWriteSplitter getChunkedWrite(String characteristic) {
     return writeChunks.get(characteristic);
+  }
+
+  public void setChunkedRead(String characteristic, ChunkedReadComposer composer) {
+    if (composer == null) {
+      readChunks.remove(characteristic);
+    } else {
+      readChunks.put(characteristic, composer);
+    }
+  }
+
+  public ChunkedReadComposer getChunkedRead(String characteristic) {
+    return readChunks.get(characteristic);
+  }
+
+  public void reset() {
+    state = ConnectionState.DISCONNECTED;
+    gattLink = null;
+    requestedMtu = null;
+    readChunks.clear();
+    writeChunks.clear();
   }
 }

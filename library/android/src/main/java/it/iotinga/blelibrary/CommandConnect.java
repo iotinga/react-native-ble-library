@@ -6,6 +6,10 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.content.Context;
+import android.os.Build;
+
+import androidx.annotation.RequiresApi;
+import androidx.annotation.RequiresPermission;
 
 import com.facebook.react.bridge.ReadableMap;
 
@@ -25,7 +29,7 @@ public class CommandConnect implements Command {
     this.connectionContext = connectionContext;
   }
 
-  @SuppressLint("MissingPermission")
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
   public void execute(ReadableMap command) {
     String id = command.getString("id");
@@ -33,14 +37,20 @@ public class CommandConnect implements Command {
       throw new RuntimeException("missing id field");
     }
 
+    if (command.hasKey("mtu")) {
+      int mtu = command.getInt("mtu");
+      connectionContext.setRequestedMtu(mtu);
+    }
+
     try {
       BluetoothDevice device = bluetoothAdapter.getRemoteDevice(id);
-      BluetoothGatt gatt = device.connectGatt(context, false, bluetoothGattCallback);
+      BluetoothGatt gatt = device.connectGatt(context, false,  bluetoothGattCallback);
 
       connectionContext.setGattLink(gatt);
       connectionContext.setConnectionState(ConnectionState.CONNECTING);
     } catch (IllegalArgumentException exception) {
       eventEmitter.emitError(ErrorType.CONNECT_ERROR, "device with such ID not found");
+      connectionContext.reset();
     }
   }
 }

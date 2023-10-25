@@ -1,14 +1,16 @@
 package it.iotinga.blelibrary;
 
-import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 import android.os.Build;
 
 import androidx.annotation.RequiresApi;
+import androidx.annotation.RequiresPermission;
 
+import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableMap;
 
 import java.util.Base64;
 import java.util.UUID;
@@ -24,9 +26,8 @@ public class CommandWrite implements Command {
     this.connectionContext = connectionContext;
   }
 
-
   @Override
-  @SuppressLint("MissingPermission")
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void execute(ReadableMap command) {
     String serviceUuidString = command.getString("service");
     if (serviceUuidString == null) {
@@ -41,6 +42,15 @@ public class CommandWrite implements Command {
     String valueBase64 = command.getString("value");
     if (valueBase64 == null) {
       throw new RuntimeException("missing value argument");
+    }
+
+    WritableMap payload = Arguments.createMap();
+    payload.putString("service", serviceUuidString);
+    payload.putString("characteristic", charUuidString);
+
+    if (connectionContext.getChunkedRead(charUuidString) != null
+      || connectionContext.getChunkedWrite(charUuidString) != null) {
+      eventEmitter.emitError(ErrorType.INVALID_STATE, "a read/write operation is already in progress", payload);
     }
 
     byte[] value = base64Decoder.decode(valueBase64);
@@ -66,7 +76,7 @@ public class CommandWrite implements Command {
       // launch the write of the characteristic
       boolean result = gatt.writeCharacteristic(characteristic);
       if (!result) {
-        eventEmitter.emitError(ErrorType.WRITE_ERROR, "error writing characteristic");
+        eventEmitter.emitError(ErrorType.WRITE_ERROR, "error writing characteristic", payload);
       }
     }
   }

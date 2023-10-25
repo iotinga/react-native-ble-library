@@ -1,22 +1,31 @@
-import React, { useMemo } from 'react'
-import { Button, SafeAreaView, Text } from 'react-native'
-
-import { BleManagerFactory, BleManagerProvider, useBleManager } from '@iotinga/react-native-ble-library'
+import {
+  BleConnectionState,
+  BleManagerFactory,
+  BleManagerProvider,
+  useBleConnection,
+  useBlePermissions,
+} from '@iotinga/react-native-ble-library'
+import React, { useMemo, useState } from 'react'
+import { ConnectionScreen } from './ConnectionScreen'
+import { PermissionScreen } from './PermissionScreen'
+import { ScanScreen } from './ScanScreen'
+import { ViewScreen } from './ViewScreen'
 
 function ExampleComponent() {
-  const [bleState, bleManager] = useBleManager()
-  console.log(bleState)
+  const [permissionGranted] = useBlePermissions()
+  const [connectionState] = useBleConnection()
+  const [deviceId, setDeviceId] = useState<string>()
 
-  return (
-    <SafeAreaView>
-      <Text>READY: {bleState.ready.toString()}</Text>
-      <Text>SCAN: {bleState.scan.state}</Text>
-      {bleState.scan.state === 'scanning' &&
-        bleState.scan.discoveredDevices.map((device) => <Text key={device.id}>{device.name}</Text>)}
-      <Button onPress={() => bleManager.scan([])} title="SCAN" />
-      <Text>CONNECT: {bleState.connection.state}</Text>
-    </SafeAreaView>
-  )
+  if (!permissionGranted) {
+    return <PermissionScreen />
+  }
+  if (deviceId === undefined) {
+    return <ScanScreen onSelectDevice={setDeviceId} />
+  }
+  if (connectionState !== BleConnectionState.Connected) {
+    return <ConnectionScreen id={deviceId} />
+  }
+  return <ViewScreen />
 }
 
 export default function App() {

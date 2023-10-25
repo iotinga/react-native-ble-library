@@ -1,7 +1,8 @@
 package it.iotinga.blelibrary;
 
-import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothGatt;
+
+import androidx.annotation.RequiresPermission;
 
 import com.facebook.react.bridge.ReadableMap;
 
@@ -12,7 +13,7 @@ public class CommandDisconnect implements Command {
     this.connectionContext = connectionContext;
   }
 
-  @SuppressLint("MissingPermission")
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
   public void execute(ReadableMap command) {
     if (connectionContext.getConnectionState() != ConnectionState.DISCONNECTED) {

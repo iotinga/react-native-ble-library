@@ -5,7 +5,11 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 
+import androidx.annotation.RequiresPermission;
+
+import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableMap;
 
 import java.util.UUID;
 
@@ -18,7 +22,7 @@ public class CommandSubscribe implements Command {
     this.connectionContext = connectionContext;
   }
 
-  @SuppressLint("MissingPermission")
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
   public void execute(ReadableMap command) {
     String serviceUuidString = command.getString("service");
@@ -31,6 +35,10 @@ public class CommandSubscribe implements Command {
       throw new RuntimeException("missing characteristic argument");
     }
 
+    WritableMap payload = Arguments.createMap();
+    payload.putString("characteristic", charUuidString);
+    payload.putString("service", serviceUuidString);
+
     if (connectionContext.getConnectionState() == ConnectionState.CONNECTED) {
       BluetoothGatt gatt = connectionContext.getGattLink();
       BluetoothGattService service = gatt.getService(UUID.fromString(serviceUuidString));
@@ -38,7 +46,9 @@ public class CommandSubscribe implements Command {
 
       boolean result = gatt.setCharacteristicNotification(characteristic, true);
       if (!result) {
-        eventEmitter.emitError(ErrorType.SUBSCRIBE_ERROR, "error subscribing to characteristic");
+        eventEmitter.emitError(ErrorType.SUBSCRIBE_ERROR, "error subscribing to characteristic", payload);
+      } else {
+        eventEmitter.emit(EventType.SUBSCRIBED, payload);
       }
     }
   }
