@@ -2,7 +2,6 @@ import { PromiseSequencer } from './PromiseSequencer'
 import { BLE_PERMISSIONS } from './constants'
 import type { BleEvent, INativeBleInterface } from './interface'
 import {
-  BleCharacteristicState,
   BleConnectionState,
   BleScanState,
   type BleCharacteristic,
@@ -10,6 +9,7 @@ import {
   type IBleChar,
   type IBleManager,
   type IPermissionManager,
+  BleErrorCode,
 } from './types'
 
 export class BleManager implements IBleManager {
@@ -85,7 +85,7 @@ export class BleManager implements IBleManager {
   }
 
   private ping(): void {
-    this.nativeInterface.sendCommands([{ type: 'ping' }])
+    this.nativeInterface.sendCommands({ type: 'ping' })
   }
 
   // processes an event form the native driver and updates the state of the manager
@@ -96,31 +96,6 @@ export class BleManager implements IBleManager {
       case 'pong':
         this.setState({
           ready: true,
-        })
-        break
-      case 'disconnected':
-        this.setState({
-          connection: {
-            ...this.state.connection,
-            state: BleConnectionState.Disconnected,
-          },
-        })
-        break
-      case 'scanStarted':
-        this.setState({
-          scan: {
-            ...this.state.scan,
-            state: BleScanState.Scanning,
-            discoveredDevices: [],
-          },
-        })
-        break
-      case 'scanStopped':
-        this.setState({
-          scan: {
-            ...this.state.scan,
-            state: BleScanState.Stopped,
-          },
         })
         break
       case 'scanResult':
@@ -155,51 +130,46 @@ export class BleManager implements IBleManager {
           },
         })
         break
-      case 'connected':
-        this.setState({
-          connection: {
-            ...this.state.connection,
-            state: BleConnectionState.Connected,
-          },
-          services: {},
-        })
-        break
       case 'charValueChanged':
         this.setChar(event.service, event.characteristic, {
-          state: BleCharacteristicState.Ready,
-          value: Buffer.from(event.value, 'base64'),
-        })
-        break
-      case 'subscribed':
-        this.setChar(event.service, event.characteristic, {
-          subscribed: true,
-        })
-        break
-      case 'unsubscribed':
-        this.setChar(event.service, event.characteristic, {
-          subscribed: false,
-        })
-        break
-      case 'writeCompleted':
-        this.setChar(event.service, event.characteristic, {
-          state: BleCharacteristicState.Ready,
-          writeProgress: undefined,
-        })
-        break
-      case 'readCompleted':
-        this.setChar(event.service, event.characteristic, {
-          state: BleCharacteristicState.Ready,
-          readProgress: undefined,
           value: Buffer.from(event.value, 'base64'),
         })
         break
       case 'error':
-        this.setState({
-          error: {
-            code: event.error,
-            message: event.message,
-          },
-        })
+        switch (event.error) {
+          case BleErrorCode.BleScanError:
+            this.setState({
+              scan: {
+                ...this.state.scan,
+                state: BleScanState.Stopped,
+              },
+              error: {
+                code: event.error,
+                message: event.message,
+              },
+            })
+            break
+          case BleErrorCode.DeviceDisconnected:
+            this.setState({
+              connection: {
+                ...this.state.connection,
+                state: BleConnectionState.Disconnected,
+              },
+              error: {
+                code: event.error,
+                message: event.message,
+              },
+            })
+            break
+          case BleErrorCode.GenericError:
+            this.setState({
+              error: {
+                code: event.error,
+                message: event.message,
+              },
+            })
+            break
+        }
         break
     }
   }
@@ -208,17 +178,6 @@ export class BleManager implements IBleManager {
     for (const callback of this.callbacks) {
       callback(this.state)
     }
-  }
-
-  private waitEvent(...events: BleEvent['type'][]): Promise<BleEvent> {
-    return new Promise<BleEvent>((resolve) => {
-      const unsubscribe = this.nativeInterface.addListener((event) => {
-        if (events.includes(event.type)) {
-          unsubscribe()
-          resolve(event)
-        }
-      })
-    })
   }
 
   onStateChange(callback: (state: BleManagerState) => void): () => void {
@@ -243,8 +202,7 @@ export class BleManager implements IBleManager {
           serviceUuids,
         },
       })
-      await this.nativeInterface.sendCommands([{ type: 'scan', serviceUuids }])
-      await this.waitEvent('scanStarted', 'error')
+      await this.nativeInterface.sendCommands({ type: 'scan', serviceUuids })
     }
   }
 
@@ -256,8 +214,7 @@ export class BleManager implements IBleManager {
           state: BleScanState.Stopping,
         },
       })
-      await this.nativeInterface.sendCommands([{ type: 'stopScan' }])
-      await this.waitEvent('scanStopped', 'error')
+      await this.nativeInterface.sendCommands({ type: 'stopScan' })
     }
   }
 
@@ -274,8 +231,13 @@ export class BleManager implements IBleManager {
             id,
           },
         })
-        await this.nativeInterface.sendCommands([{ type: 'connect', id, mtu }])
-        await this.waitEvent('connected', 'error')
+        await this.nativeInterface.sendCommands({ type: 'connect', id, mtu })
+        this.setState({
+          connection: {
+            ...this.state.connection,
+            state: BleConnectionState.Connected,
+          },
+        })
       }
     })
   }
@@ -292,8 +254,13 @@ export class BleManager implements IBleManager {
             state: BleConnectionState.Disconnecting,
           },
         })
-        await this.nativeInterface.sendCommands([{ type: 'disconnect' }])
-        await this.waitEvent('disconnected', 'error')
+        await this.nativeInterface.sendCommands({ type: 'disconnect' })
+        this.setState({
+          connection: {
+            ...this.state.connection,
+            state: BleConnectionState.Disconnected,
+          },
+        })
       }
     })
   }
@@ -301,19 +268,12 @@ export class BleManager implements IBleManager {
   read(characteristic: IBleChar): Promise<void> {
     return this.sequencer.execute(async () => {
       if (this.state.connection.state === BleConnectionState.Connected) {
-        this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
-          state: BleCharacteristicState.Reading,
+        await this.nativeInterface.sendCommands({
+          type: 'read',
+          service: characteristic.getServiceUuid(),
+          characteristic: characteristic.getCharUuid(),
+          size: characteristic.getSize(),
         })
-
-        await this.nativeInterface.sendCommands([
-          {
-            type: 'read',
-            service: characteristic.getServiceUuid(),
-            characteristic: characteristic.getCharUuid(),
-            size: characteristic.getSize(),
-          },
-        ])
-        await this.waitEvent('readCompleted', 'error')
       }
     })
   }
@@ -322,7 +282,6 @@ export class BleManager implements IBleManager {
     return this.sequencer.execute(async () => {
       if (this.state.connection.state === BleConnectionState.Connected) {
         this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
-          state: BleCharacteristicState.Writing,
           writeProgress: {
             current: 0,
             total: value.length,
@@ -330,16 +289,13 @@ export class BleManager implements IBleManager {
           value: value,
         })
 
-        await this.nativeInterface.sendCommands([
-          {
-            type: 'write',
-            service: characteristic.getServiceUuid(),
-            characteristic: characteristic.getCharUuid(),
-            value: value.toString('base64'),
-            maxSize: characteristic.getChunkSize(),
-          },
-        ])
-        await this.waitEvent('writeCompleted', 'error')
+        await this.nativeInterface.sendCommands({
+          type: 'write',
+          service: characteristic.getServiceUuid(),
+          characteristic: characteristic.getCharUuid(),
+          value: value.toString('base64'),
+          chunkSize: characteristic.getChunkSize(),
+        })
       }
     })
   }
@@ -347,10 +303,14 @@ export class BleManager implements IBleManager {
   subscribe(characteristic: IBleChar): Promise<void> {
     return this.sequencer.execute(async () => {
       if (this.state.connection.state === BleConnectionState.Connected) {
-        await this.nativeInterface.sendCommands([
-          { type: 'subscribe', service: characteristic.getServiceUuid(), characteristic: characteristic.getCharUuid() },
-        ])
-        await this.waitEvent('subscribed', 'error')
+        await this.nativeInterface.sendCommands({
+          type: 'subscribe',
+          service: characteristic.getServiceUuid(),
+          characteristic: characteristic.getCharUuid(),
+        })
+        this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
+          subscribed: true,
+        })
       }
     })
   }
@@ -358,14 +318,14 @@ export class BleManager implements IBleManager {
   unsubscribe(characteristic: IBleChar): Promise<void> {
     return this.sequencer.execute(async () => {
       if (this.state.connection.state === BleConnectionState.Connected) {
-        await this.nativeInterface.sendCommands([
-          {
-            type: 'unsubscribe',
-            service: characteristic.getServiceUuid(),
-            characteristic: characteristic.getCharUuid(),
-          },
-        ])
-        await this.waitEvent('unsubscribed', 'error')
+        await this.nativeInterface.sendCommands({
+          type: 'unsubscribe',
+          service: characteristic.getServiceUuid(),
+          characteristic: characteristic.getCharUuid(),
+        })
+        this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
+          subscribed: false,
+        })
       }
     })
   }

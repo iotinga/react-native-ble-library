@@ -16,7 +16,7 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
-import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.module.annotations.ReactModule;
 
 @ReactModule(name = BleLibraryModule.NAME)
@@ -46,11 +46,11 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     dispatcher.register("scan", new CommandScan(bluetoothLeScanner, scanCallback));
     dispatcher.register("stopScan", new CommandScanStop(bluetoothLeScanner, scanCallback));
     dispatcher.register("connect", new CommandConnect(eventEmitter, reactContext, bluetoothAdapter, gattCallback, connectionContext));
-    dispatcher.register("disconnect", new CommandDisconnect(connectionContext));
+    dispatcher.register("disconnect", new CommandDisconnect(eventEmitter, connectionContext));
     dispatcher.register("write", new CommandWrite(eventEmitter, connectionContext));
     dispatcher.register("read", new CommandRead(eventEmitter, connectionContext));
-    dispatcher.register("subscribe", new CommandSubscribe(eventEmitter, connectionContext));
-    dispatcher.register("unsubscribe", new CommandUnsubscribe(eventEmitter, connectionContext));
+    dispatcher.register("subscribe", new CommandSubscribe(connectionContext));
+    dispatcher.register("unsubscribe", new CommandUnsubscribe(connectionContext));
   }
 
   @Override
@@ -60,19 +60,10 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  public void sendCommands(ReadableArray commands, Promise promise) {
-    Log.i(NAME, "received commands: " + commands.toString());
+  public void sendCommand(ReadableMap command, Promise promise) {
+    Log.i(NAME, "received command: " + command.toString());
 
-    try {
-      for (int i = 0; i < commands.size(); i++) {
-        dispatcher.dispatch(commands.getMap(i));
-      }
-
-      promise.resolve(null);
-    } catch (Exception e) {
-      Log.e(NAME, "command execution failed: " + e);
-      promise.reject(ErrorType.GENERIC_ERROR.toString(), e.toString(), e);
-    }
+    dispatcher.dispatch(command, promise);
   }
 
   @ReactMethod

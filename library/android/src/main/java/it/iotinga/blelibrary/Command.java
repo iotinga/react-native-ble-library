@@ -3,5 +3,5 @@ package it.iotinga.blelibrary;
 import com.facebook.react.bridge.ReadableMap;
 
 public interface Command {
-  void execute(ReadableMap command);
+  void execute(ReadableMap command, AsyncOperation operation) throws BleException;
 }

@@ -10,7 +10,8 @@ public class CommandPing implements Command {
   }
 
   @Override
-  public void execute(ReadableMap command) {
+  public void execute(ReadableMap command, AsyncOperation operation) {
     this.eventEmitter.emit(EventType.PONG);
+    operation.complete();
   }
 }

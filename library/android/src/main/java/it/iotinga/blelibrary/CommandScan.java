@@ -30,7 +30,7 @@ public class CommandScan implements Command {
   @RequiresPermission(value = "android.permission.BLUETOOTH_SCAN")
 
   @Override
-  public void execute(ReadableMap command) {
+  public void execute(ReadableMap command, AsyncOperation operation) {
     ReadableArray serviceUuids = command.getArray("serviceUuids");
     List<ScanFilter> filters = null;
     if (serviceUuids != null) {
@@ -47,5 +47,6 @@ public class CommandScan implements Command {
       .build();
 
     bluetoothLeScanner.startScan(filters, settings, scanCallback);
+    operation.complete();
   }
 }

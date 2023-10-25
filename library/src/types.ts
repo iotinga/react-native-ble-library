@@ -1,7 +1,7 @@
 export enum BleErrorCode {
   GenericError = 'BleGenericError',
   DeviceDisconnected = 'BleDeviceDisconnected',
-  InvalidState = 'BleInvalidState',
+  BleScanError = 'BleScanError',
 }
 
 export type BleDeviceInfo = {
@@ -15,20 +15,12 @@ export type BleDeviceInfo = {
   rssi: number
 }
 
-export enum BleCharacteristicState {
-  None = 'none',
-  Reading = 'reading',
-  Writing = 'writing',
-  Ready = 'ready',
-}
-
 export type BleProgressIndication = {
   current: number
   total: number
 }
 
 export type BleCharacteristic = {
-  state: BleCharacteristicState
   subscribed: boolean
   value?: Buffer
   writeProgress?: BleProgressIndication

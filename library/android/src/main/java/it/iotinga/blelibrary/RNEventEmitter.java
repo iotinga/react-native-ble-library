@@ -33,12 +33,12 @@ public class RNEventEmitter implements EventEmitter {
   }
 
   @Override
-  public void emitError(ErrorType error, String message) {
+  public void emitError(ErrorCode error, String message) {
     emitError(error, message, Arguments.createMap());
   }
 
   @Override
-  public void emitError(ErrorType error, String message, WritableMap details) {
+  public void emitError(ErrorCode error, String message, WritableMap details) {
     details.putString("error", error.toString());
     details.putString("message", message);
 

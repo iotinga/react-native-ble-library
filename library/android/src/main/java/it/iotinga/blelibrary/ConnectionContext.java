@@ -8,9 +8,7 @@ import java.util.Map;
 public class ConnectionContext {
   private ConnectionState state = ConnectionState.DISCONNECTED;
   private BluetoothGatt gattLink;
-  private Integer requestedMtu;
-  private final Map<String, ChunkedWriteSplitter> writeChunks = new HashMap<>();
-  private final Map<String, ChunkedReadComposer> readChunks = new HashMap<>();
+  private PendingGattOperation pendingGattOperation;
 
   public ConnectionState getConnectionState() {
     return this.state;
@@ -28,43 +26,25 @@ public class ConnectionContext {
     this.gattLink = gattLink;
   }
 
-  public Integer getRequestedMtu() {
-    return requestedMtu;
-  }
-
-  public void setRequestedMtu(Integer requestedMtu) {
-    this.requestedMtu = requestedMtu;
-  }
-
-  public void setChunkedWrite(String characteristic, ChunkedWriteSplitter splitter) {
-    if (splitter == null) {
-      writeChunks.remove(characteristic);
+  public void setPendingGattOperation(PendingGattOperation operation) throws BleException {
+    if (pendingGattOperation == null || !pendingGattOperation.isPending()) {
+      pendingGattOperation = operation;
     } else {
-      writeChunks.put(characteristic, splitter);
+      throw new BleException("driver busy");
     }
   }
 
-  public ChunkedWriteSplitter getChunkedWrite(String characteristic) {
-    return writeChunks.get(characteristic);
-  }
-
-  public void setChunkedRead(String characteristic, ChunkedReadComposer composer) {
-    if (composer == null) {
-      readChunks.remove(characteristic);
+  public PendingGattOperation getPendingGattOperation() {
+    if (pendingGattOperation != null && pendingGattOperation.isPending()) {
+      return pendingGattOperation;
     } else {
-      readChunks.put(characteristic, composer);
+      return null;
     }
-  }
-
-  public ChunkedReadComposer getChunkedRead(String characteristic) {
-    return readChunks.get(characteristic);
   }
 
   public void reset() {
     state = ConnectionState.DISCONNECTED;
     gattLink = null;
-    requestedMtu = null;
-    readChunks.clear();
-    writeChunks.clear();
+    pendingGattOperation = null;
   }
 }

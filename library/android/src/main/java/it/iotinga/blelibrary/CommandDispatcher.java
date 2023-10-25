@@ -1,5 +1,6 @@
 package it.iotinga.blelibrary;
 
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
 
 import java.util.HashMap;
@@ -12,17 +13,23 @@ public class CommandDispatcher implements Dispatcher {
     commands.put(name, command);
   }
 
-  public void dispatch(ReadableMap payload) {
-    String type = payload.getString("type");
-    if (type == null) {
-      throw new RuntimeException("missing type field");
-    }
+  public void dispatch(ReadableMap payload, Promise promise) {
+    AsyncOperation operation = new PromiseAsyncOperation(promise);
 
-    Command command = commands.get(type);
-    if (command == null) {
-      throw new RuntimeException("command is not found");
-    }
+    try {
+      String type = payload.getString("type");
+      if (type == null) {
+        throw new BleInvalidArgumentException("missing type field");
+      }
 
-    command.execute(payload);
+      Command command = commands.get(type);
+      if (command == null) {
+        throw new BleInvalidArgumentException("command is not found");
+      }
+
+      command.execute(payload, operation);
+    } catch (Exception e) {
+      operation.fail(e);
+    }
   }
 }

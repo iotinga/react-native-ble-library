@@ -1,6 +1,5 @@
 package it.iotinga.blelibrary;
 
-import android.annotation.SuppressLint;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 
@@ -19,7 +18,9 @@ public class CommandScanStop implements Command {
 
   @RequiresPermission(value = "android.permission.BLUETOOTH_SCAN")
   @Override
-  public void execute(ReadableMap command) {
+  public void execute(ReadableMap command, AsyncOperation operation) {
     bluetoothLeScanner.stopScan(scanCallback);
+    operation.complete();
   }
 }
+

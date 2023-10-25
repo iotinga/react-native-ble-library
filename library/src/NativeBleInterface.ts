@@ -4,8 +4,8 @@ import type { BleCommand, BleEvent, IBleNativeModule, INativeBleInterface } from
 export class NativeBleInterface implements INativeBleInterface {
   constructor(private readonly nativeModule: IBleNativeModule, private readonly eventEmitter: NativeEventEmitter) {}
 
-  sendCommands(commands: BleCommand[]): Promise<void> {
-    return this.nativeModule.sendCommands(commands)
+  sendCommands(command: BleCommand): Promise<void> {
+    return this.nativeModule.sendCommand(command)
   }
 
   addListener(listener: (event: BleEvent) => void): () => void {

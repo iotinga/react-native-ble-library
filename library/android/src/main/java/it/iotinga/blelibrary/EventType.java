@@ -6,18 +6,10 @@ public enum EventType {
   PONG("pong"),
   ERROR("error"),
   SCAN_RESULT("scanResult"),
-  SCAN_STOPPED("scanStopped"),
-  SCAN_STARTED("scanStarted"),
-  CONNECTED("connected"),
-  DISCONNECTED("disconnected"),
-  SUBSCRIBED("subscribed"),
-  UNSUBSCRIBED("unsubscribed"),
   CHAR_VALUE_CHANGED("charValueChanged"),
   READ_PROGRESS("readProgress"),
-  READ_COMPLETED("readCompleted"),
-  WRITE_COMPLETED("writeCompleted"),
-  WRITE_PROGRESS("writeProgress"),
-  MTU_CHANGED("mtuChanged");
+  WRITE_PROGRESS("writeProgress");
+
   private final String type;
 
   EventType(String type) {

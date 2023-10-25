@@ -1,5 +1,4 @@
 import {
-  BleCharacteristicState,
   BleConnectionState,
   BleScanState,
   type BleCharacteristic,
@@ -106,7 +105,6 @@ export class DemoBleManager implements IBleManager {
 
   async write(characteristic: IBleChar, value: Buffer): Promise<void> {
     this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
-      state: BleCharacteristicState.Ready,
       writeProgress: {
         current: 0,
         total: value.length,

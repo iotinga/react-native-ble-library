@@ -8,21 +8,23 @@ import com.facebook.react.bridge.ReadableMap;
 
 public class CommandDisconnect implements Command {
   private final ConnectionContext connectionContext;
+  private final EventEmitter eventEmitter;
 
-  public CommandDisconnect(ConnectionContext connectionContext) {
+  public CommandDisconnect(EventEmitter eventEmitter, ConnectionContext connectionContext) {
     this.connectionContext = connectionContext;
+    this.eventEmitter = eventEmitter;
   }
 
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
-  public void execute(ReadableMap command) {
+  public void execute(ReadableMap command, AsyncOperation operation) throws BleException {
     if (connectionContext.getConnectionState() != ConnectionState.DISCONNECTED) {
+      PendingGattDisconnect disconnect = new PendingGattDisconnect(eventEmitter, operation);
+      connectionContext.setPendingGattOperation(disconnect);
       connectionContext.setConnectionState(ConnectionState.DISCONNECTING);
-
-      BluetoothGatt gatt = connectionContext.getGattLink();
-      if (gatt != null) {
-        gatt.disconnect();
-      }
+      connectionContext.getGattLink().disconnect();
+    } else {
+      operation.complete();
     }
   }
 }

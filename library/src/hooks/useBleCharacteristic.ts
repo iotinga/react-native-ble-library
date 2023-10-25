@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BleCharacteristicState, type IBleChar } from '../types'
+import { type IBleChar } from '../types'
 import { useBleManager } from './useBleManager'
 
 export function useBleCharacteristic(
@@ -11,10 +11,10 @@ export function useBleCharacteristic(
   const char = state.services[characteristic.getServiceUuid()]?.[characteristic.getCharUuid()]
 
   useEffect(() => {
-    if (char?.state === undefined || char?.state === BleCharacteristicState.None) {
+    if (char?.value === undefined) {
       manager.read(characteristic)
     }
-  }, [characteristic, manager, char?.state])
+  }, [characteristic, manager, char?.value])
 
   useEffect(() => {
     if (subscribe) {

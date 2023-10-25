@@ -1,43 +1,34 @@
 package it.iotinga.blelibrary;
 
-import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 
 import androidx.annotation.RequiresPermission;
 
-import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReadableMap;
-import com.facebook.react.bridge.WritableMap;
 
 import java.util.UUID;
 
 public class CommandUnsubscribe implements Command {
-  private final EventEmitter eventEmitter;
   private final ConnectionContext connectionContext;
 
-  public CommandUnsubscribe(EventEmitter eventEmitter, ConnectionContext connectionContext) {
-    this.eventEmitter = eventEmitter;
+  public CommandUnsubscribe(ConnectionContext connectionContext) {
     this.connectionContext = connectionContext;
   }
 
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
-  public void execute(ReadableMap command) {
+  public void execute(ReadableMap command, AsyncOperation operation) throws BleException {
     String serviceUuidString = command.getString("service");
     if (serviceUuidString == null) {
-      throw new RuntimeException("missing service argument");
+      throw new BleInvalidArgumentException("missing service argument");
     }
 
     String charUuidString = command.getString("characteristic");
     if (charUuidString == null) {
-      throw new RuntimeException("missing characteristic argument");
+      throw new BleInvalidArgumentException("missing characteristic argument");
     }
-
-    WritableMap payload = Arguments.createMap();
-    payload.putString("characteristic", charUuidString);
-    payload.putString("service", serviceUuidString);
 
     if (connectionContext.getConnectionState() == ConnectionState.CONNECTED) {
       BluetoothGatt gatt = connectionContext.getGattLink();
@@ -46,10 +37,13 @@ public class CommandUnsubscribe implements Command {
 
       boolean result = gatt.setCharacteristicNotification(characteristic, false);
       if (!result) {
-       eventEmitter.emitError(ErrorType.UNSUBSCRIBE_ERROR, "error unsubscribing from characteristic", payload);
+        throw new BleGattException("driver error");
       } else {
-        eventEmitter.emit(EventType.UNSUBSCRIBED, payload);
+        operation.complete();
       }
+    } else {
+      throw new BleInvalidStateException("not connected");
     }
   }
 }
+
