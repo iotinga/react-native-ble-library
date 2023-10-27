@@ -13,31 +13,31 @@ public abstract class PendingGattOperation {
   }
 
   void onConnected(BluetoothGatt gatt) {
-    operation.fail(new BleInvalidStateException("unexpected onConnected"));
+    operation.fail(new BleException("UnexpectedCallback", "unexpected onConnected"));
   }
 
   void onMtuChanged(BluetoothGatt gatt) {
-    operation.fail(new BleInvalidStateException("unexpected onMtuChanged"));
+    operation.fail(new BleException("UnexpectedCallback", "unexpected onMtuChanged"));
   }
 
   void onServiceDiscovered(BluetoothGatt gatt) {
-    operation.fail(new BleInvalidStateException("unexpected onServiceDiscovered"));
+    operation.fail(new BleException("UnexpectedCallback", "unexpected onServiceDiscovered"));
   }
 
   void onDisconnected(BluetoothGatt gatt) {
-    operation.fail(new BleInvalidStateException("unexpected onDisconnected"));
+    operation.fail(new BleException("UnexpectedCallback", "unexpected onDisconnected"));
   }
 
   void onCharRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-    operation.fail(new BleInvalidStateException("unexpected onCharRead"));
+    operation.fail(new BleException("UnexpectedCallback", "unexpected onCharRead"));
   }
 
   void onCharWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-    operation.fail(new BleInvalidStateException("unexpected charWrite"));
+    operation.fail(new BleException("UnexpectedCallback", "unexpected charWrite"));
   }
 
   void onError(int gattError) {
-    operation.fail(new BleGattException(gattError));
+    operation.fail(new BleException("GattError", "GATT error code " + gattError));
   }
 
   boolean isPending() {

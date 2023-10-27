@@ -4,11 +4,9 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothProfile;
-import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 import androidx.annotation.RequiresPermission;
 
 import com.facebook.react.bridge.Arguments;
@@ -16,7 +14,6 @@ import com.facebook.react.bridge.WritableMap;
 
 import java.util.Base64;
 
-@RequiresApi(api = Build.VERSION_CODES.O)
 public class BleBluetoothGattCallback extends BluetoothGattCallback {
   private static final String TAG = "BleGattCallback";
 
@@ -29,8 +26,8 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     this.connectionContext = connectionContext;
   }
 
-  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onConnectionStateChange(@NonNull BluetoothGatt gatt, int status, int newState) {
     Log.d(TAG, "onConnectionStateChange - status: " + status + ", newState: " + newState);
 
@@ -48,12 +45,16 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     // if an error occurred or I'm disconnected signal the JS and reset connection state
     if (status != BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
       eventEmitter.emitError(ErrorCode.DEVICE_DISCONNECTED, "device disconnected");
+      PendingGattOperation pendingGattOperation = connectionContext.getPendingGattOperation();
+      if (pendingGattOperation != null) {
+        pendingGattOperation.operation.fail(new BleException("GattError", "device disconnected"));
+      }
       connectionContext.reset();
     }
   }
 
-  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onMtuChanged(@NonNull BluetoothGatt gatt, int mtu, int status) {
     Log.d(TAG, "onMtuChanged - status: " + status + ", mtu: " + mtu);
 
@@ -67,8 +68,8 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     }
   }
 
-  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onServicesDiscovered(@NonNull BluetoothGatt gatt, int status) {
     Log.d(TAG, "onServiceDiscovered - status: " + status);
 
@@ -82,8 +83,8 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     }
   }
 
-  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onCharacteristicWrite(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, int status) {
     Log.d(TAG, "onCharacteristicWrite - status: " + status);
 

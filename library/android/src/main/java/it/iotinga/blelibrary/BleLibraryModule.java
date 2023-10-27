@@ -6,51 +6,45 @@ import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.content.Context;
-import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
-import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.module.annotations.ReactModule;
+
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
 
 @ReactModule(name = BleLibraryModule.NAME)
 public class BleLibraryModule extends ReactContextBaseJavaModule {
   public static final String NAME = "BleLibrary";
 
   private int listenerCount = 0;
+  private final BleScanner scanner;
+  private final BleGatt gatt;
+  private final EventEmitter emitter;
 
-  private final Dispatcher dispatcher;
-
-  @RequiresApi(api = Build.VERSION_CODES.O)
   public BleLibraryModule(ReactApplicationContext reactContext) {
     super(reactContext);
-
-    EventEmitter eventEmitter = new RNEventEmitter(reactContext);
-    ConnectionContext connectionContext = new ConnectionContext();
 
     BluetoothManager bluetoothManager = (BluetoothManager) reactContext.getSystemService(Context.BLUETOOTH_SERVICE);
     BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
     BluetoothLeScanner bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
 
-    ScanCallback scanCallback = new BleScanCallback(eventEmitter);
-    BluetoothGattCallback gattCallback = new BleBluetoothGattCallback(eventEmitter, connectionContext);
+    emitter = new RNEventEmitter(reactContext);
 
-    dispatcher = new CommandDispatcher();
-    dispatcher.register("ping", new CommandPing(eventEmitter));
-    dispatcher.register("scan", new CommandScan(bluetoothLeScanner, scanCallback));
-    dispatcher.register("stopScan", new CommandScanStop(bluetoothLeScanner, scanCallback));
-    dispatcher.register("connect", new CommandConnect(eventEmitter, reactContext, bluetoothAdapter, gattCallback, connectionContext));
-    dispatcher.register("disconnect", new CommandDisconnect(eventEmitter, connectionContext));
-    dispatcher.register("write", new CommandWrite(eventEmitter, connectionContext));
-    dispatcher.register("read", new CommandRead(eventEmitter, connectionContext));
-    dispatcher.register("subscribe", new CommandSubscribe(connectionContext));
-    dispatcher.register("unsubscribe", new CommandUnsubscribe(connectionContext));
+    ScanCallback scanCallback = new BleScanCallback(emitter);
+    ConnectionContext connectionContext = new ConnectionContext();
+    BluetoothGattCallback gattCallback = new BleBluetoothGattCallback(emitter, connectionContext);
+
+    scanner = new BleScannerImpl(bluetoothLeScanner, scanCallback);
+    gatt = new BleGattImpl(bluetoothAdapter, gattCallback, connectionContext, emitter, reactContext);
   }
 
   @Override
@@ -60,10 +54,112 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  public void sendCommand(ReadableMap command, Promise promise) {
-    Log.i(NAME, "received command: " + command.toString());
+  public void ping(Promise promise) {
+    emitter.emit(EventType.PONG);
+    promise.resolve(null);
+  }
 
-    dispatcher.dispatch(command, promise);
+  @ReactMethod
+  public void scanStart(ReadableArray filterUuid, Promise promise) {
+    PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
+    try {
+      List<String> filter = new ArrayList<>();
+      if (filterUuid != null) {
+        for (int i = 0; i < filterUuid.size(); i++) {
+          filter.add(filterUuid.getString(i));
+        }
+      }
+      scanner.start(filter);
+      operation.complete();
+    } catch (Exception e) {
+      operation.fail(e);
+    }
+  }
+
+  @ReactMethod
+  public void scanStop(Promise promise) {
+    PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
+    try {
+      scanner.stop();
+      operation.complete();
+    } catch (Exception e) {
+      operation.fail(e);
+    }
+  }
+
+  @ReactMethod
+  public void connect(String id, Double mtu, Promise promise) {
+    Log.d(NAME, String.format("call connect(%s, %f)", id, mtu));
+
+    PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
+    try {
+      gatt.connect(operation, id, mtu.intValue());
+    } catch (Exception e) {
+      operation.fail(e);
+    }
+  }
+
+  @ReactMethod
+  public void disconnect(Promise promise) {
+    Log.d(NAME, "call disconnect()");
+
+    PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
+    try {
+      gatt.disconnect(operation);
+    } catch (Exception e) {
+      operation.fail(e);
+    }
+  }
+
+  @ReactMethod
+  public void read(String service, String characteristic, Double size, Promise promise) {
+    Log.d(NAME, String.format("call read(%s, %s, %f)", service, characteristic, size));
+
+    PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
+    try {
+      gatt.read(operation, service, characteristic, size.intValue());
+    } catch (Exception e) {
+      operation.fail(e);
+    }
+  }
+
+  @ReactMethod
+  public void write(String service, String characteristic, String value, Double chunkSize, Promise promise) {
+    Log.d(NAME, String.format("call write(%s, %s, %s, %f)", service, characteristic, value, chunkSize));
+
+    PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
+    try {
+      byte[] data = Base64.getDecoder().decode(value);
+      gatt.write(operation, service, characteristic, data, chunkSize.intValue());
+    } catch (Exception e) {
+      operation.fail(e);
+    }
+  }
+
+  @ReactMethod
+  public void subscribe(String service, String characteristic, Promise promise) {
+    Log.d(NAME, String.format("call subscribe(%s, %s)", service, characteristic));
+
+    PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
+    try {
+      gatt.subscribe(service, characteristic);
+      operation.complete();
+    } catch (Exception e) {
+      operation.fail(e);
+    }
+  }
+
+  @ReactMethod
+  public void unsubscribe(String service, String characteristic, Promise promise) {
+    Log.d(NAME, String.format("call unsubscribe(%s, %s)", service, characteristic));
+
+    PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
+    try {
+      gatt.unsubscribe(service, characteristic);
+      operation.complete();
+    } catch (Exception e) {
+      operation.fail(e);
+    }
   }
 
   @ReactMethod

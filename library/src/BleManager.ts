@@ -1,20 +1,24 @@
 import { PromiseSequencer } from './PromiseSequencer'
 import { BLE_PERMISSIONS } from './constants'
-import type { BleEvent, INativeBleInterface } from './interface'
+import type { IBleNativeEventListener, INativeBleInterface } from './interface'
 import {
   BleConnectionState,
+  BleErrorCode,
   BleScanState,
   type BleCharacteristic,
+  type BleDeviceInfo,
   type BleManagerState,
   type IBleChar,
   type IBleManager,
   type IPermissionManager,
-  BleErrorCode,
 } from './types'
 
-export class BleManager implements IBleManager {
+// as required by the standard
+const MAX_BLE_CHAR_SIZE = 512
+
+export class BleManager implements IBleManager, IBleNativeEventListener {
   private readonly callbacks = new Set<(state: BleManagerState) => void>()
-  private readonly listenerSubscription: () => void
+  private readonly removeAllListeners: () => void
   private state: BleManagerState = {
     ready: false,
     permission: {
@@ -38,11 +42,10 @@ export class BleManager implements IBleManager {
     private readonly nativeInterface: INativeBleInterface,
     private readonly permissionManager: IPermissionManager<string>
   ) {
-    this.listenerSubscription = this.nativeInterface.addListener(this.onEvent.bind(this))
+    this.removeAllListeners = this.nativeInterface.addListener(this)
     this.checkPermissions()
     this.ping()
   }
-
   private setState(state: Partial<BleManagerState>): void {
     this.state = {
       ...this.state,
@@ -67,111 +70,35 @@ export class BleManager implements IBleManager {
   }
 
   private async checkPermissions() {
+    console.info('[BleManager] checking permissions...')
     this.setState({
       permission: {
         granted: await this.permissionManager.hasPermission(BLE_PERMISSIONS),
       },
     })
+    console.info('[BleManager] permissions granted:', this.state.permission.granted)
   }
 
   async askPermissions(): Promise<boolean> {
+    console.info('[BleManager] asking permissions...')
     this.setState({
       permission: {
         granted: await this.permissionManager.askPermission(BLE_PERMISSIONS),
       },
     })
+    console.info('[BleManager] permissions granted:', this.state.permission.granted)
 
     return this.state.permission.granted === true
   }
 
   private ping(): void {
-    this.nativeInterface.sendCommands({ type: 'ping' })
+    this.nativeInterface.ping()
   }
 
-  // processes an event form the native driver and updates the state of the manager
-  // accordingly. Notice that the state is an immutable object, otherwise the mechanism
-  // of React will not work.
-  private onEvent(event: BleEvent): void {
-    switch (event.type) {
-      case 'pong':
-        this.setState({
-          ready: true,
-        })
-        break
-      case 'scanResult':
-        let devices = this.state.scan.discoveredDevices
-        for (const device of event.devices) {
-          if (devices.find((d) => d.id === device.id) === undefined) {
-            devices = [...devices, device]
-          }
-        }
-        if (devices !== this.state.scan.discoveredDevices) {
-          this.setState({
-            scan: {
-              ...this.state.scan,
-              discoveredDevices: devices,
-            },
-          })
-        }
-        break
-      case 'writeProgress':
-        this.setChar(event.service, event.characteristic, {
-          writeProgress: {
-            current: event.current,
-            total: event.total,
-          },
-        })
-        break
-      case 'readProgress':
-        this.setChar(event.service, event.characteristic, {
-          readProgress: {
-            current: event.current,
-            total: event.total,
-          },
-        })
-        break
-      case 'charValueChanged':
-        this.setChar(event.service, event.characteristic, {
-          value: Buffer.from(event.value, 'base64'),
-        })
-        break
-      case 'error':
-        switch (event.error) {
-          case BleErrorCode.BleScanError:
-            this.setState({
-              scan: {
-                ...this.state.scan,
-                state: BleScanState.Stopped,
-              },
-              error: {
-                code: event.error,
-                message: event.message,
-              },
-            })
-            break
-          case BleErrorCode.DeviceDisconnected:
-            this.setState({
-              connection: {
-                ...this.state.connection,
-                state: BleConnectionState.Disconnected,
-              },
-              error: {
-                code: event.error,
-                message: event.message,
-              },
-            })
-            break
-          case BleErrorCode.GenericError:
-            this.setState({
-              error: {
-                code: event.error,
-                message: event.message,
-              },
-            })
-            break
-        }
-        break
-    }
+  onPong(): void {
+    this.setState({
+      ready: true,
+    })
   }
 
   private notify(): void {
@@ -194,6 +121,7 @@ export class BleManager implements IBleManager {
   }
 
   async scan(serviceUuids?: string[]): Promise<void> {
+    console.info('[BleManager] starting scan...')
     if (this.state.scan.state !== BleScanState.Scanning && this.state.scan.state !== BleScanState.Starting) {
       this.setState({
         scan: {
@@ -202,11 +130,34 @@ export class BleManager implements IBleManager {
           serviceUuids,
         },
       })
-      await this.nativeInterface.sendCommands({ type: 'scan', serviceUuids })
+      await this.nativeInterface.scanStart(serviceUuids?.map((s) => s.toLowerCase()))
+    }
+  }
+
+  onScanResult(data: { devices: BleDeviceInfo[] }): void {
+    console.info('[BleManager] got scan result', data)
+    let devices = this.state.scan.discoveredDevices
+    for (const device of data.devices) {
+      if (devices.find((d) => d.id === device.id) === undefined) {
+        devices = [...devices, device]
+      } else if (!device.available) {
+        devices = devices.filter((d) => d.id !== device.id)
+      } else {
+        devices = devices.map((d) => (d.id === device.id ? device : d))
+      }
+    }
+    if (devices !== this.state.scan.discoveredDevices) {
+      this.setState({
+        scan: {
+          ...this.state.scan,
+          discoveredDevices: devices,
+        },
+      })
     }
   }
 
   async stopScan(): Promise<void> {
+    console.info('[BleManager] stopping scan...')
     if (this.state.scan.state !== BleScanState.Stopped && this.state.scan.state !== BleScanState.Stopping) {
       this.setState({
         scan: {
@@ -214,12 +165,17 @@ export class BleManager implements IBleManager {
           state: BleScanState.Stopping,
         },
       })
-      await this.nativeInterface.sendCommands({ type: 'stopScan' })
+      await this.nativeInterface.scanStop()
+    } else {
+      console.warn('[BleManager] scan already stopped')
     }
   }
 
   connect(id: string, mtu?: number): Promise<void> {
+    console.info(`[BleManager] enqueue connect(${id}, ${mtu})`)
     return this.sequencer.execute(async () => {
+      console.info(`[BleManager] execute connect(${id}, ${mtu})`)
+
       if (
         this.state.connection.state !== BleConnectionState.Connected &&
         this.state.connection.state !== BleConnectionState.Connecting
@@ -231,19 +187,33 @@ export class BleManager implements IBleManager {
             id,
           },
         })
-        await this.nativeInterface.sendCommands({ type: 'connect', id, mtu })
-        this.setState({
-          connection: {
-            ...this.state.connection,
-            state: BleConnectionState.Connected,
-          },
-        })
+        try {
+          await this.nativeInterface.connect(id, mtu ?? 0)
+          this.setState({
+            connection: {
+              ...this.state.connection,
+              state: BleConnectionState.Connected,
+            },
+          })
+        } catch (e) {
+          this.setState({
+            connection: {
+              ...this.state.connection,
+              state: BleConnectionState.Disconnected,
+            },
+          })
+        }
+      } else {
+        console.warn('[BleManager] already connected')
       }
     })
   }
 
   disconnect(): Promise<void> {
+    console.info('[BleManager] enqueue disconnect()')
     return this.sequencer.execute(async () => {
+      console.info('[BleManager] execute disconnect()')
+
       if (
         this.state.connection.state !== BleConnectionState.Disconnected &&
         this.state.connection.state !== BleConnectionState.Disconnecting
@@ -254,32 +224,59 @@ export class BleManager implements IBleManager {
             state: BleConnectionState.Disconnecting,
           },
         })
-        await this.nativeInterface.sendCommands({ type: 'disconnect' })
-        this.setState({
-          connection: {
-            ...this.state.connection,
-            state: BleConnectionState.Disconnected,
-          },
-        })
+        try {
+          await this.nativeInterface.disconnect()
+          this.setState({
+            connection: {
+              ...this.state.connection,
+              state: BleConnectionState.Disconnected,
+            },
+          })
+        } catch (e) {
+          this.setState({
+            connection: {
+              ...this.state.connection,
+              state: BleConnectionState.Unknown,
+            },
+          })
+        }
+      } else {
+        console.warn('[BleManager] already disconnected')
       }
     })
   }
 
   read(characteristic: IBleChar): Promise<void> {
+    console.info(`[BleManager] enqueue read(${characteristic})`)
     return this.sequencer.execute(async () => {
+      console.info(`[BleManager] execute read(${characteristic})`)
       if (this.state.connection.state === BleConnectionState.Connected) {
-        await this.nativeInterface.sendCommands({
-          type: 'read',
-          service: characteristic.getServiceUuid(),
-          characteristic: characteristic.getCharUuid(),
-          size: characteristic.getSize(),
+        const result = await this.nativeInterface.read(
+          characteristic.getServiceUuid(),
+          characteristic.getCharUuid(),
+          characteristic.getSize() ?? 0
+        )
+        this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
+          value: Buffer.from(result, 'base64'),
         })
       }
     })
   }
 
+  onReadProgress(data: { service: string; characteristic: string; current: number; total: number }): void {
+    console.info('[BleManager] read progress', data)
+    this.setChar(data.service, data.characteristic, {
+      readProgress: {
+        current: data.current,
+        total: data.total,
+      },
+    })
+  }
+
   write(characteristic: IBleChar, value: Buffer): Promise<void> {
+    console.info(`[BleManager] enqueue write(${characteristic}, ${value})`)
     return this.sequencer.execute(async () => {
+      console.info(`[BleManager] execute write(${characteristic}, ${value})`)
       if (this.state.connection.state === BleConnectionState.Connected) {
         this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
           writeProgress: {
@@ -289,25 +286,32 @@ export class BleManager implements IBleManager {
           value: value,
         })
 
-        await this.nativeInterface.sendCommands({
-          type: 'write',
-          service: characteristic.getServiceUuid(),
-          characteristic: characteristic.getCharUuid(),
-          value: value.toString('base64'),
-          chunkSize: characteristic.getChunkSize(),
-        })
+        await this.nativeInterface.write(
+          characteristic.getServiceUuid(),
+          characteristic.getCharUuid(),
+          value.toString('base64'),
+          characteristic.getChunkSize() ?? MAX_BLE_CHAR_SIZE
+        )
       }
     })
   }
 
+  onWriteProgress(data: { service: string; characteristic: string; current: number; total: number }): void {
+    console.info('[BleManager] write progress', data)
+    this.setChar(data.service, data.characteristic, {
+      writeProgress: {
+        current: data.current,
+        total: data.total,
+      },
+    })
+  }
+
   subscribe(characteristic: IBleChar): Promise<void> {
+    console.info(`[BleManager] enqueue subscribe(${characteristic})`)
     return this.sequencer.execute(async () => {
+      console.info(`[BleManager] execute subscribe(${characteristic})`)
       if (this.state.connection.state === BleConnectionState.Connected) {
-        await this.nativeInterface.sendCommands({
-          type: 'subscribe',
-          service: characteristic.getServiceUuid(),
-          characteristic: characteristic.getCharUuid(),
-        })
+        await this.nativeInterface.subscribe(characteristic.getServiceUuid(), characteristic.getCharUuid())
         this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
           subscribed: true,
         })
@@ -316,13 +320,11 @@ export class BleManager implements IBleManager {
   }
 
   unsubscribe(characteristic: IBleChar): Promise<void> {
+    console.info(`[BleManager] enqueue unsubscribe(${characteristic})`)
     return this.sequencer.execute(async () => {
+      console.info(`[BleManager] execute unsubscribe(${characteristic})`)
       if (this.state.connection.state === BleConnectionState.Connected) {
-        await this.nativeInterface.sendCommands({
-          type: 'unsubscribe',
-          service: characteristic.getServiceUuid(),
-          characteristic: characteristic.getCharUuid(),
-        })
+        await this.nativeInterface.unsubscribe(characteristic.getServiceUuid(), characteristic.getCharUuid())
         this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
           subscribed: false,
         })
@@ -330,7 +332,53 @@ export class BleManager implements IBleManager {
     })
   }
 
+  onCharValueChanged(data: { service: string; characteristic: string; value: string }): void {
+    console.info('[BleManager] char value changed', data)
+    this.setChar(data.service, data.characteristic, {
+      value: Buffer.from(data.value, 'base64'),
+    })
+  }
+
+  onError(data: { error: BleErrorCode; message: string }): void {
+    console.info('[BleManager] error from native code', data)
+    switch (data.error) {
+      case BleErrorCode.BleScanError:
+        this.setState({
+          scan: {
+            ...this.state.scan,
+            state: BleScanState.Stopped,
+          },
+          error: {
+            code: data.error,
+            message: data.message,
+          },
+        })
+        break
+      case BleErrorCode.DeviceDisconnected:
+        this.setState({
+          connection: {
+            ...this.state.connection,
+            state: BleConnectionState.Disconnected,
+          },
+          error: {
+            code: data.error,
+            message: data.message,
+          },
+        })
+        break
+      case BleErrorCode.GenericError:
+        this.setState({
+          error: {
+            code: data.error,
+            message: data.message,
+          },
+        })
+        break
+    }
+  }
+
   dispose(): void {
-    this.listenerSubscription()
+    console.info('[BleManager] terminating manager')
+    this.removeAllListeners()
   }
 }

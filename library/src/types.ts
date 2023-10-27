@@ -13,6 +13,8 @@ export type BleDeviceInfo = {
 
   /** Signal strength of the discovered device */
   rssi: number
+
+  available: boolean
 }
 
 export type BleProgressIndication = {
@@ -39,6 +41,7 @@ export enum BleConnectionState {
   Connecting = 'connecting',
   Connected = 'connected',
   Disconnecting = 'disconnecting',
+  Unknown = 'unknown',
 }
 
 export type BleManagerState = {

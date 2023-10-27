@@ -9,7 +9,6 @@ import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 public class RNEventEmitter implements EventEmitter {
   private static final String TAG = "RNEventEmitter";
-  private static final String EVENT_NAME = "BleLibraryEvent";
   private final ReactApplicationContext rnContext;
 
   RNEventEmitter(ReactApplicationContext rnContext) {
@@ -22,14 +21,12 @@ public class RNEventEmitter implements EventEmitter {
   }
 
   @Override
-  public void emit(EventType event, WritableMap payload) {
-    payload.putString("type", event.toString());
-
-    Log.d(TAG, "sending event: " + payload);
+  public void emit(EventType type, WritableMap payload) {
+    Log.d(TAG, String.format("sending event: %s payload %s", type, payload));
 
     rnContext
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-        .emit(EVENT_NAME, payload);
+        .emit(type.toString(), payload);
   }
 
   @Override

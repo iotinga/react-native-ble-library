@@ -18,9 +18,9 @@ export function ViewScreen() {
 
   return (
     <SafeAreaView>
-      <Text>Reported: {reported}</Text>
-      <Text>Desired: {desired}</Text>
-      <Text>Transfer: {transfer}</Text>
+      <Text>Reported: {reported?.toString('base64')}</Text>
+      <Text>Desired: {desired?.toString('base64')}</Text>
+      <Text>Transfer: {transfer?.toString('base64')}</Text>
     </SafeAreaView>
   )
 }

@@ -3,6 +3,7 @@ package it.iotinga.blelibrary;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
+import android.bluetooth.le.ScanSettings;
 import android.util.Log;
 
 import androidx.annotation.RequiresPermission;
@@ -23,24 +24,28 @@ public class BleScanCallback extends ScanCallback {
   }
 
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
-  private WritableMap scanResultToWritableMap(ScanResult result) {
+  private WritableMap scanResultToWritableMap(ScanResult result, boolean available) {
+
     BluetoothDevice device = result.getDevice();
 
     WritableMap deviceInfo = Arguments.createMap();
     deviceInfo.putString("name", device.getName());
     deviceInfo.putString("id", device.getAddress());
     deviceInfo.putInt("rssi", result.getRssi());
+    deviceInfo.putBoolean("available", available);
 
     return deviceInfo;
   }
 
-  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onScanResult(int callbackType, ScanResult result) {
-    Log.i(TAG, "got scan result: " + result);
+    Log.i(TAG, String.format("got scan result: %s (callback type: %d)", result, callbackType));
 
+    boolean available = callbackType == ScanSettings.CALLBACK_TYPE_FIRST_MATCH
+      || callbackType == ScanSettings.CALLBACK_TYPE_ALL_MATCHES;
     WritableArray devices = Arguments.createArray();
-    devices.pushMap(scanResultToWritableMap(result));
+    devices.pushMap(scanResultToWritableMap(result, available));
 
     WritableMap event = Arguments.createMap();
     event.putArray("devices", devices);
@@ -53,14 +58,14 @@ public class BleScanCallback extends ScanCallback {
     eventEmitter.emitError(ErrorCode.SCAN_ERROR, "scan error, native error code " + errorCode);
   }
 
-  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   @Override
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onBatchScanResults(List<ScanResult> results) {
     Log.i(TAG, "got batch result: " + results);
 
     WritableArray devices = Arguments.createArray();
-    for (ScanResult result: results) {
-      devices.pushMap(scanResultToWritableMap(result));
+    for (ScanResult result : results) {
+      devices.pushMap(scanResultToWritableMap(result, true));
     }
 
     WritableMap event = Arguments.createMap();

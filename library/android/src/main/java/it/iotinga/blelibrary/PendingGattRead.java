@@ -2,9 +2,7 @@ package it.iotinga.blelibrary;
 
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
-import android.os.Build;
 
-import androidx.annotation.RequiresApi;
 import androidx.annotation.RequiresPermission;
 
 import com.facebook.react.bridge.Arguments;
@@ -12,7 +10,6 @@ import com.facebook.react.bridge.WritableMap;
 
 import java.util.Base64;
 
-@RequiresApi(api = Build.VERSION_CODES.O)
 public class PendingGattRead extends PendingGattOperation {
   private final Base64.Encoder b64Encoder = Base64.getEncoder();
   private int receivedBytes = 0;
@@ -22,11 +19,9 @@ public class PendingGattRead extends PendingGattOperation {
   PendingGattRead(EventEmitter emitter, AsyncOperation operation, int totalSize) {
     super(emitter, operation);
     this.totalSize = totalSize;
-    this.data = new byte[totalSize];
-  }
-
-  PendingGattRead(EventEmitter emitter, AsyncOperation operation) {
-    super(emitter, operation);
+    if (totalSize != 0) {
+      this.data = new byte[this.totalSize];
+    }
   }
 
   private boolean hasMoreChunks() {

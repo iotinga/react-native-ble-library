@@ -11,7 +11,6 @@ import com.facebook.react.bridge.WritableMap;
 import java.util.Arrays;
 
 public class PendingGattWrite extends PendingGattOperation {
-  private static final int MAX_BLE_CHAR_SIZE = 512;
   private final byte[] bytes;
   private final int chunkSize;
   private int writtenBytes = 0;
@@ -20,10 +19,6 @@ public class PendingGattWrite extends PendingGattOperation {
     super(emitter, operation);
     this.bytes = bytes;
     this.chunkSize = chunkSize;
-  }
-
-  PendingGattWrite(EventEmitter emitter, AsyncOperation operation, byte[] bytes) {
-    this(emitter, operation, bytes, MAX_BLE_CHAR_SIZE);
   }
 
   private boolean hasNextChunk() {
@@ -46,11 +41,11 @@ public class PendingGattWrite extends PendingGattOperation {
   public void doWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
     boolean result = characteristic.setValue(getNextChunk());
     if (!result) {
-      operation.fail(new BleGattException("setValue failed"));
+      operation.fail(new BleException("GattError", "setValue failed"));
     } else {
       result = gatt.writeCharacteristic(characteristic);
       if (!result) {
-        operation.fail(new BleGattException("writeCharacteristic failed"));
+        operation.fail(new BleException("GattError", "writeCharacteristic failed"));
       }
     }
   }

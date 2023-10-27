@@ -1,4 +1,4 @@
-import { Platform } from "react-native"
+import { Platform } from 'react-native'
 import { PERMISSIONS } from 'react-native-permissions'
 
 export const BLE_PERMISSIONS: string[] = Platform.select({

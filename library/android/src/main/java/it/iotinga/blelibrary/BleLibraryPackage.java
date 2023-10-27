@@ -1,9 +1,6 @@
 package it.iotinga.blelibrary;
 
-import android.os.Build;
-
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.NativeModule;
@@ -15,7 +12,6 @@ import java.util.Collections;
 import java.util.List;
 
 public class BleLibraryPackage implements ReactPackage {
-  @RequiresApi(api = Build.VERSION_CODES.O)
   @NonNull
   @Override
   public List<NativeModule> createNativeModules(@NonNull ReactApplicationContext reactContext) {

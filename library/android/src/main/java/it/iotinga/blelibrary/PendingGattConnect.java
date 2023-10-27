@@ -6,14 +6,12 @@ import androidx.annotation.RequiresPermission;
 
 public class PendingGattConnect extends PendingGattOperation {
   private final int requestMtu;
+  private final ConnectionContext context;
 
-  PendingGattConnect(EventEmitter emitter, AsyncOperation operation, int requestMtu) {
+  PendingGattConnect(EventEmitter emitter, AsyncOperation operation, int requestMtu, ConnectionContext context) {
     super(emitter, operation);
     this.requestMtu = requestMtu;
-  }
-
-  PendingGattConnect(EventEmitter emitter, AsyncOperation operation) {
-    this(emitter, operation, 0);
+    this.context = context;
   }
 
   @Override
@@ -26,6 +24,7 @@ public class PendingGattConnect extends PendingGattOperation {
       result = gatt.discoverServices();
     }
     if (!result) {
+      context.setConnectionState(ConnectionState.DISCONNECTED);
       operation.fail(new BleException("driver busy"));
     }
   }
@@ -35,12 +34,14 @@ public class PendingGattConnect extends PendingGattOperation {
   void onMtuChanged(BluetoothGatt gatt) {
     boolean result = gatt.discoverServices();
     if (!result) {
+      context.setConnectionState(ConnectionState.DISCONNECTED);
       operation.fail(new BleException("driver busy"));
     }
   }
 
   @Override
   void onServiceDiscovered(BluetoothGatt gatt) {
+    context.setConnectionState(ConnectionState.CONNECTED);
     operation.complete();
   }
 }
