@@ -6,6 +6,7 @@
     self = [super init];
     if (self != nil) {
         self.data = data;
+        self.size = data.length;
         self.written = 0;
         self.chunkSize = chunkSize;
     }
@@ -21,7 +22,13 @@
         .location = self.written,
         .length = self.chunkSize,
     };
-    self.written += self.chunkSize;
+    
+    NSUInteger remainingLength = self.size - self.written;
+    if (range.length > remainingLength) {
+        range.length = remainingLength;
+    }
+    
+    self.written += range.length;
 
     return [self.data subdataWithRange:range];
 }
