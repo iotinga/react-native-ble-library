@@ -35,6 +35,7 @@ export type BleCharacteristic = {
   value?: Buffer
   writeProgress?: BleProgressIndication
   readProgress?: BleProgressIndication
+  filterFn?: (value: Buffer) => boolean
 }
 
 export enum BleScanState {
@@ -146,7 +147,7 @@ export interface IBleManager {
    * Subscribes for notification of the specified (service, characteristic). Each time the
    * characteristic changes the state is automatically updated accordingly.
    */
-  subscribe(characteristic: IBleChar): Promise<void>
+  subscribe(characteristic: IBleChar, filterFn?: (value: Buffer) => boolean): Promise<void>
 
   /**
    * Removes a previously set subscription for (service, characteristic)

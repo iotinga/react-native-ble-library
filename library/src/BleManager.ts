@@ -318,7 +318,7 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
     })
   }
 
-  subscribe(characteristic: IBleChar): Promise<void> {
+  subscribe(characteristic: IBleChar, filterFn?: (value: Buffer) => boolean): Promise<void> {
     console.info(`[BleManager] enqueue subscribe(${characteristic})`)
     return this.sequencer.execute(async () => {
       console.info(`[BleManager] execute subscribe(${characteristic})`)
@@ -326,6 +326,7 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
         await this.nativeInterface.subscribe(characteristic.getServiceUuid(), characteristic.getCharUuid())
         this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
           subscribed: true,
+          filterFn,
         })
       }
     })
@@ -345,10 +346,13 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
   }
 
   onCharValueChanged(data: { service: string; characteristic: string; value: string }): void {
-    console.info('[BleManager] char value changed', data)
-    this.setChar(data.service, data.characteristic, {
-      value: Buffer.from(data.value, 'base64'),
-    })
+    const filter = this.state.services[data.service]?.[data.characteristic]?.filterFn
+    if (filter === undefined || filter(Buffer.from(data.value, 'base64'))) {
+      console.info('[BleManager] char value changed', data)
+      this.setChar(data.service, data.characteristic, {
+        value: Buffer.from(data.value, 'base64'),
+      })
+    }
   }
 
   onError(data: { error: BleErrorCode; message: string }): void {
