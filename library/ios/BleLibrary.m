@@ -194,7 +194,7 @@ didDiscoverPeripheral:(CBPeripheral *)peripheral
     NSDictionary *result = @{
         @"devices": @[
             @{
-                @"id": peripheral.identifier.UUIDString,
+                @"id": peripheral.identifier.UUIDString.lowercaseString,
                 @"name": peripheral.name,
                 @"rssi": RSSI,
                 @"available": @YES,
@@ -465,8 +465,8 @@ didWriteValueForCharacteristic:(CBCharacteristic *)characteristic
         if ([self.write hasMoreChunks]) {
             NSLog(@"[BleLibrary] write another chunk of data (%lu/%lu)", self.write.size, self.write.written);
             NSDictionary *data = @{
-                @"characteristic": characteristic.UUID.UUIDString,
-                @"service": characteristic.service.UUID.UUIDString,
+                @"characteristic": characteristic.UUID.UUIDString.lowercaseString,
+                @"service": characteristic.service.UUID.UUIDString.lowercaseString,
                 @"current": [NSNumber numberWithUnsignedInt:self.write.written],
                 @"total": [NSNumber numberWithUnsignedInt:self.write.size],
             };
@@ -536,8 +536,8 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
             NSLog(@"[BleLibrary] need to receive more data (%ld/%ld) for characteristic, notify JS", (long)self.read.read, (long)self.read.size);
 
             NSDictionary *data = @{
-                @"characteristic": characteristic.UUID.UUIDString,
-                @"service": characteristic.service.UUID.UUIDString,
+                @"characteristic": characteristic.UUID.UUIDString.lowercaseString,
+                @"service": characteristic.service.UUID.UUIDString.lowercaseString,
                 @"current": [NSNumber numberWithUnsignedInt:self.read.read],
                 @"total": [NSNumber numberWithUnsignedInt:self.read.size],
             };
@@ -554,8 +554,8 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
         NSLog(@"[BleLibrary] subscription updated characteristic %@, notify JS", characteristic);
         NSDictionary *data = @{
             @"value": [characteristic.value base64EncodedStringWithOptions:0],
-            @"characteristic": characteristic.UUID.UUIDString,
-            @"service": characteristic.service.UUID.UUIDString,
+            @"characteristic": characteristic.UUID.UUIDString.lowercaseString,
+            @"service": characteristic.service.UUID.UUIDString.lowercaseString,
         };
         [self sendEventWithName:EventCharValueChanged body:data];
     }
