@@ -38,6 +38,9 @@ public class BleGattImpl implements BleGatt {
 
         context.setPendingGattOperation(new PendingGattConnect(emitter, operation, mtu, context));
         gatt = device.connectGatt(appContext, false,  callback);
+        if (gatt == null) {
+          throw new BleException(BleLibraryModule.ERROR_GATT, "gatt instance is null");
+        }
         context.setConnectionState(ConnectionState.CONNECTING);
       } catch (Exception exception) {
         context.setPendingGattOperation(null);
@@ -51,7 +54,7 @@ public class BleGattImpl implements BleGatt {
   public void disconnect(AsyncOperation operation) throws BleException {
     if (context.getConnectionState() == ConnectionState.CONNECTED) {
       if (gatt == null) {
-        throw new BleException("InternalError", "gatt is undefined");
+        throw new BleException(BleLibraryModule.ERROR_GATT, "gatt is undefined");
       }
       try {
         context.setPendingGattOperation(new PendingGattDisconnect(emitter, operation));
@@ -68,14 +71,14 @@ public class BleGattImpl implements BleGatt {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void read(AsyncOperation operation, String serviceUuid, String characteristicUuid, int size) throws BleException {
     if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
-      throw new BleException("NotConnectedError", "not connected");
+      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
     }
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, characteristicUuid);
 
     try {
       PendingGattRead read = new PendingGattRead(emitter, operation, size);
       context.setPendingGattOperation(read);
-      read.doRead(gatt, characteristic);
+      read.firstRead(gatt, characteristic);
     } catch (Exception exception) {
       context.setPendingGattOperation(null);
       throw exception;
@@ -86,14 +89,14 @@ public class BleGattImpl implements BleGatt {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void write(AsyncOperation operation, String serviceUuid, String characteristicUuid, byte[] value, int chunkSize) throws BleException {
     if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
-      throw new BleException("NotConnectedError", "not connected");
+      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
     }
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, characteristicUuid);
 
     try {
       PendingGattWrite write = new PendingGattWrite(emitter, operation, value, chunkSize);
       context.setPendingGattOperation(write);
-      write.doWrite(gatt, characteristic);
+      write.firstWrite(gatt, characteristic);
     } catch (Exception exception) {
       context.setPendingGattOperation(null);
       throw exception;
@@ -104,13 +107,13 @@ public class BleGattImpl implements BleGatt {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void subscribe(String serviceUuid, String characteristicUuid) throws BleException {
     if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
-      throw new BleException("NotConnectedError", "not connected");
+      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
     }
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, characteristicUuid);
 
     boolean result = gatt.setCharacteristicNotification(characteristic, true);
     if (!result) {
-      throw new BleException("GattError", "setCharacteristicNotification failed");
+      throw new BleException(BleLibraryModule.ERROR_GATT, "setCharacteristicNotification failed");
     }
   }
 
@@ -118,25 +121,47 @@ public class BleGattImpl implements BleGatt {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void unsubscribe(String serviceUuid, String characteristicUuid) throws BleException {
     if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
-      throw new BleException("NotConnectedError", "not connected");
+      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
     }
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, characteristicUuid);
 
     boolean result = gatt.setCharacteristicNotification(characteristic, false);
     if (!result) {
-      throw new BleException("GattError", "setCharacteristicNotification failed");
+      throw new BleException(BleLibraryModule.ERROR_GATT, "setCharacteristicNotification failed");
     }
+  }
+
+  @Override
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
+  public void readRSSI(AsyncOperation operation) throws BleException {
+    if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
+      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
+    }
+
+    context.setPendingGattOperation(new PendingReadRssi(emitter, operation));
+
+    boolean result = gatt.readRemoteRssi();
+    if (!result) {
+      throw new BleException(BleLibraryModule.ERROR_GATT, "setCharacteristicNotification failed");
+    }
+  }
+
+  @Override
+  @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
+  public void dispose() {
+    gatt.disconnect();
+    gatt = null;
   }
 
   private BluetoothGattCharacteristic getCharacteristic(String serviceUuid, String characteristicUuid) throws BleException {
     BluetoothGattService service = gatt.getService(UUID.fromString(serviceUuid));
     if (service == null) {
-      throw new BleException("GattError", "service not found");
+      throw new BleException(BleLibraryModule.ERROR_GATT, "service not found");
     }
 
     BluetoothGattCharacteristic characteristic = service.getCharacteristic(UUID.fromString(characteristicUuid));
     if (characteristic == null) {
-      throw new BleException("GattError", "characteristic not found");
+      throw new BleException(BleLibraryModule.ERROR_GATT, "characteristic not found");
     }
 
     return characteristic;

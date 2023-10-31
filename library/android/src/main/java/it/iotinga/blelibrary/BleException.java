@@ -4,7 +4,7 @@ import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
 
 public class BleException extends Exception {
-  public static final String DEFAULT_ERROR_CODE = "BleNativeModuleError";
+  public static final String DEFAULT_ERROR_CODE = BleLibraryModule.ERROR_GENERIC;
 
   private final WritableMap details;
 
@@ -18,10 +18,6 @@ public class BleException extends Exception {
 
   BleException(String code, String message) {
     this(code, message, Arguments.createMap());
-  }
-
-  BleException(String message) {
-    this(DEFAULT_ERROR_CODE, message);
   }
 
   public WritableMap getDetails() {

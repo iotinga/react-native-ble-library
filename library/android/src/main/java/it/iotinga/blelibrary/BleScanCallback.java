@@ -49,13 +49,13 @@ public class BleScanCallback extends ScanCallback {
 
     WritableMap event = Arguments.createMap();
     event.putArray("devices", devices);
-    eventEmitter.emit(EventType.SCAN_RESULT, event);
+    eventEmitter.emit(EventEmitter.EVENT_SCAN_RESULT, event);
   }
 
   @Override
   public void onScanFailed(int errorCode) {
     Log.e(TAG, "SCAN FAILED, error = " + errorCode);
-    eventEmitter.emitError(ErrorCode.SCAN_ERROR, "scan error, native error code " + errorCode);
+    eventEmitter.emitError(BleLibraryModule.ERROR_SCAN, "scan error, native error code " + errorCode);
   }
 
   @Override
@@ -70,7 +70,7 @@ public class BleScanCallback extends ScanCallback {
 
     WritableMap event = Arguments.createMap();
     event.putArray("devices", devices);
-    eventEmitter.emit(EventType.SCAN_RESULT, event);
+    eventEmitter.emit(EventEmitter.EVENT_SCAN_RESULT, event);
   }
 }
 

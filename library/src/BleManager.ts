@@ -1,5 +1,4 @@
 import { PromiseSequencer } from './PromiseSequencer'
-import { BLE_PERMISSIONS } from './constants'
 import type { IBleNativeEventListener, INativeBleInterface } from './interface'
 import {
   BleConnectionState,
@@ -10,7 +9,6 @@ import {
   type BleManagerState,
   type IBleChar,
   type IBleManager,
-  type IPermissionManager,
 } from './types'
 
 // as required by the standard
@@ -21,6 +19,7 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
   private readonly removeAllListeners: () => void
   private state: BleManagerState = {
     ready: false,
+    enabled: false,
     permission: {
       granted: null,
     },
@@ -38,14 +37,11 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
   }
   private readonly sequencer = new PromiseSequencer()
 
-  constructor(
-    private readonly nativeInterface: INativeBleInterface,
-    private readonly permissionManager: IPermissionManager<string>
-  ) {
+  constructor(private readonly nativeInterface: INativeBleInterface) {
     this.removeAllListeners = this.nativeInterface.addListener(this)
-    this.checkPermissions()
-    this.ping()
+    this.init()
   }
+
   private setState(state: Partial<BleManagerState>): void {
     this.state = {
       ...this.state,
@@ -69,33 +65,40 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
     })
   }
 
-  private async checkPermissions() {
-    console.info('[BleManager] checking permissions...')
-    this.setState({
-      permission: {
-        granted: await this.permissionManager.hasPermission(BLE_PERMISSIONS),
-      },
-    })
-    console.info('[BleManager] permissions granted:', this.state.permission.granted)
+  async init(): Promise<void> {
+    if (!this.state.ready) {
+      console.info('[BleManager] initializing module...')
+      try {
+        await this.nativeInterface.initModule()
+        console.log('[BleManager] module initialized')
+      } catch (e: any) {
+        console.error('[BleManager] failed to initialize module', e)
+        if (e.code === BleErrorCode.BleNotEnabledError) {
+          console.error('[BleManager] bluetooth not enabled')
+          this.setState({
+            ready: false,
+            enabled: false,
+          })
+        } else if (e.code === BleErrorCode.MissingPermissionError) {
+          console.error('[BleManager] missing BLE permissions')
+          this.setState({
+            ready: false,
+            permission: {
+              granted: false,
+            },
+          })
+        } else {
+          console.error('[BleManager] unknown init error')
+          this.setState({
+            ready: false,
+          })
+        }
+      }
+    }
   }
 
-  async askPermissions(): Promise<boolean> {
-    console.info('[BleManager] asking permissions...')
-    this.setState({
-      permission: {
-        granted: await this.permissionManager.askPermission(BLE_PERMISSIONS),
-      },
-    })
-    console.info('[BleManager] permissions granted:', this.state.permission.granted)
-
-    return this.state.permission.granted === true
-  }
-
-  private ping(): void {
-    this.nativeInterface.ping()
-  }
-
-  onPong(): void {
+  onInitDone(): void {
+    console.info('[BleManager] pong')
     this.setState({
       ready: true,
     })
@@ -377,8 +380,22 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
     }
   }
 
+  getRSSI(): Promise<number> {
+    console.info(`[BleManager] enqueue readRSSI()`)
+    return this.sequencer.execute(async () => {
+      console.info(`[BleManager] execute readRSSI()`)
+
+      if (this.state.connection.state !== BleConnectionState.Connected) {
+        throw new Error('not connected')
+      }
+
+      return this.nativeInterface.readRSSI()
+    })
+  }
+
   dispose(): void {
     console.info('[BleManager] terminating manager')
     this.removeAllListeners()
+    this.nativeInterface.disposeModule()
   }
 }

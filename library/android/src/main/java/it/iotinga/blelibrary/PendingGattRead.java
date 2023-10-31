@@ -40,10 +40,10 @@ public class PendingGattRead extends PendingGattOperation {
   }
 
   @RequiresPermission("android.permission.BLUETOOTH_CONNECT")
-  public void doRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+  public void firstRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
     boolean result = gatt.readCharacteristic(characteristic);
     if (!result) {
-      operation.fail(new BleException("driver busy"));
+      operation.fail(new BleException(BleLibraryModule.ERROR_GATT, "write error"));
     }
   }
 
@@ -61,10 +61,10 @@ public class PendingGattRead extends PendingGattOperation {
       progress.putString("characteristic", charUuid);
       progress.putInt("total", totalSize);
       progress.putInt("current", receivedBytes);
-      emitter.emit(EventType.READ_PROGRESS, progress);
+      emitter.emit(EventEmitter.EVENT_READ_PROGRESS, progress);
 
       // request another read
-      doRead(gatt, characteristic);
+      firstRead(gatt, characteristic);
     } else {
       operation.complete(b64Encoder.encodeToString(data));
     }

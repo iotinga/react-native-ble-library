@@ -44,10 +44,10 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
 
     // if an error occurred or I'm disconnected signal the JS and reset connection state
     if (status != BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
-      eventEmitter.emitError(ErrorCode.DEVICE_DISCONNECTED, "device disconnected");
+      eventEmitter.emitError(BleLibraryModule.ERROR_DEVICE_DISCONNECTED, "device disconnected");
       PendingGattOperation pendingGattOperation = connectionContext.getPendingGattOperation();
       if (pendingGattOperation != null) {
-        pendingGattOperation.operation.fail(new BleException("GattError", "device disconnected"));
+        pendingGattOperation.operation.fail(new BleException(BleLibraryModule.ERROR_GATT, "device disconnected"));
       }
       connectionContext.reset();
     }
@@ -120,6 +120,18 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     payload.putString("service", characteristic.getService().getUuid().toString());
     payload.putString("characteristic", characteristic.getUuid().toString());
     payload.putString("value", b64Encoder.encodeToString(value));
-    eventEmitter.emit(EventType.CHAR_VALUE_CHANGED, payload);
+    eventEmitter.emit(EventEmitter.EVENT_CHAR_VALUE_CHANGED, payload);
+  }
+
+  @Override
+  public void onReadRemoteRssi(BluetoothGatt gatt, int rssi, int status) {
+    PendingGattOperation operation = connectionContext.getPendingGattOperation();
+    if (operation != null) {
+      if (status == BluetoothGatt.GATT_SUCCESS) {
+        operation.onReadRemoteRssi(gatt, rssi);
+      } else {
+        operation.onError(status);
+      }
+    }
   }
 }

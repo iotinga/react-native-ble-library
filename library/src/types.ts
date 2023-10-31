@@ -2,6 +2,14 @@ export enum BleErrorCode {
   GenericError = 'BleGenericError',
   DeviceDisconnected = 'BleDeviceDisconnected',
   BleScanError = 'BleScanError',
+  BleNotEnabledError = 'BleNotEnabledError',
+  MissingPermissionError = 'BleMissingPermissionError',
+  GATTError = 'BleGATTError',
+  ConnectionError = 'BleConnectionError',
+  NotConnectedError = 'BleNotConnectedError',
+  NotInitializedError = 'BleNotInitializedError',
+  ModuleBusyError = 'BleModuleBusyError',
+  InvalidArgumentsError = 'ErrorInvalidArguments',
 }
 
 export type BleDeviceInfo = {
@@ -47,6 +55,7 @@ export enum BleConnectionState {
 export type BleManagerState = {
   /** true if the module is ready and connected with the native driver */
   ready: boolean
+  enabled: boolean
   permission: {
     granted: boolean | null
   }
@@ -76,10 +85,12 @@ export type IBleChar = {
 
 export interface IBleManager {
   /**
-   * If the BLE permissions are not already granted asks the user for them,
-   * depending on the user platform.
+   * Needs to be called to initialize the BLE manager.
+   * This does trigger the permission request on iOS/Android.
+   * On iOS this method will fail if the BLE is not enabled, while on Android it
+   * will try to enable it automatically (and rejects if it is not possible).
    */
-  askPermissions(): Promise<boolean>
+  init(): Promise<void>
 
   /**
    * Registers a callback that is invoked each time the BleManager state changes.
@@ -146,6 +157,11 @@ export interface IBleManager {
    * Call this method after having used the BleManager to release all the resources
    */
   dispose(): void
+
+  /**
+   * get the connected device RSSI
+   */
+  getRSSI(): Promise<number>
 }
 
 export type DemoState = {

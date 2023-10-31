@@ -16,29 +16,24 @@ public class RNEventEmitter implements EventEmitter {
   }
 
   @Override
-  public void emit(EventType event) {
-    emit(event, Arguments.createMap());
-  }
-
-  @Override
-  public void emit(EventType type, WritableMap payload) {
+  public void emit(String type, WritableMap payload) {
     Log.d(TAG, String.format("sending event: %s payload %s", type, payload));
 
     rnContext
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-        .emit(type.toString(), payload);
+        .emit(type, payload);
   }
 
   @Override
-  public void emitError(ErrorCode error, String message) {
+  public void emitError(String error, String message) {
     emitError(error, message, Arguments.createMap());
   }
 
   @Override
-  public void emitError(ErrorCode error, String message, WritableMap details) {
-    details.putString("error", error.toString());
+  public void emitError(String error, String message, WritableMap details) {
+    details.putString("error", error);
     details.putString("message", message);
 
-    emit(EventType.ERROR, details);
+    emit(EventEmitter.EVENT_ERROR, details);
   }
 }

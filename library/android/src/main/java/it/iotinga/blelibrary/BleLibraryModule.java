@@ -23,28 +23,28 @@ import java.util.List;
 
 @ReactModule(name = BleLibraryModule.NAME)
 public class BleLibraryModule extends ReactContextBaseJavaModule {
+  public static final String ERROR_SCAN = "BleScanError";
+  public static final String ERROR_GENERIC = "BleGenericError";
+  public static final String ERROR_DEVICE_DISCONNECTED = "BleDeviceDisconnected";
+  public static final String ERROR_INVALID_STATE = "BleInvalidState";
+  public static final String ERROR_BLE_NOT_ENABLED = "BleNotEnabledError";
+  public static final String ERROR_BLE_NOT_SUPPORTED = "BleNotSupportedError";
+  public static final String ERROR_MISSING_PERMISSIONS = "BleMissingPermissionError";
+  public static final String ERROR_GATT = "BleGATTError";
+  public static final String ERROR_CONNECTION = "BleConnectionError";
+  public static final String ERROR_NOT_CONNECTED = "BleNotConnectedError";
+  public static final String ERROR_NOT_INITIALIZED = "BleNotInitializedError";
+  public static final String ERROR_MODULE_BUSY = "BleModuleBusyError";
+  public static final String ERROR_INVALID_ARGUMENTS = "ErrorInvalidArguments";
+
   public static final String NAME = "BleLibrary";
 
-  private int listenerCount = 0;
-  private final BleScanner scanner;
-  private final BleGatt gatt;
-  private final EventEmitter emitter;
+  private BleScanner scanner;
+  private BleGatt gatt;
+  private EventEmitter emitter;
 
   public BleLibraryModule(ReactApplicationContext reactContext) {
     super(reactContext);
-
-    BluetoothManager bluetoothManager = (BluetoothManager) reactContext.getSystemService(Context.BLUETOOTH_SERVICE);
-    BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
-    BluetoothLeScanner bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
-
-    emitter = new RNEventEmitter(reactContext);
-
-    ScanCallback scanCallback = new BleScanCallback(emitter);
-    ConnectionContext connectionContext = new ConnectionContext();
-    BluetoothGattCallback gattCallback = new BleBluetoothGattCallback(emitter, connectionContext);
-
-    scanner = new BleScannerImpl(bluetoothLeScanner, scanCallback);
-    gatt = new BleGattImpl(bluetoothAdapter, gattCallback, connectionContext, emitter, reactContext);
   }
 
   @Override
@@ -54,13 +54,84 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  public void ping(Promise promise) {
-    emitter.emit(EventType.PONG);
+  public void initModule(Promise promise) {
+    Log.d(NAME, "initModule()");
+
+    ReactApplicationContext reactContext = getReactApplicationContext();
+
+    Log.i(NAME, "checking permissions");
+    PermissionManager permissionManager = new BlePermissionsManager(reactContext);
+    permissionManager.ensure((granted) -> {
+      if (!granted) {
+        Log.w(NAME, "permission denied");
+
+        promise.reject(ERROR_MISSING_PERMISSIONS, "missing BLE permissions");
+      } else {
+        Log.i(NAME, "permission granted");
+
+        BluetoothManager bluetoothManager = (BluetoothManager) reactContext.getSystemService(Context.BLUETOOTH_SERVICE);
+        BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
+        if (bluetoothAdapter == null) {
+          Log.w(NAME, "this device doesn't have a BLE adapter");
+
+          promise.reject(ERROR_BLE_NOT_SUPPORTED, "this device doesn't support BLE");
+        } else {
+          Log.i(NAME, "checking if BLE is active");
+
+          BleActivationManager activationManager = new BleActivationManagerImpl(bluetoothAdapter, reactContext);
+          activationManager.ensureBleActive(isActive -> {
+            if (!isActive) {
+              Log.w(NAME, "BLE is not active");
+
+              promise.reject(ERROR_BLE_NOT_ENABLED, "BLE is not active and user denied activation");
+            } else {
+              Log.i(NAME, "BLE is active, proceed with resources initialization");
+
+              BluetoothLeScanner bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
+
+              emitter = new RNEventEmitter(reactContext);
+
+              ScanCallback scanCallback = new BleScanCallback(emitter);
+              ConnectionContext connectionContext = new ConnectionContext();
+              BluetoothGattCallback gattCallback = new BleBluetoothGattCallback(emitter, connectionContext);
+
+              scanner = new BleScannerImpl(bluetoothLeScanner, scanCallback);
+              gatt = new BleGattImpl(bluetoothAdapter, gattCallback, connectionContext, emitter, reactContext);
+
+              Log.i(NAME, "module initialization done :)");
+              promise.resolve(null);
+            }
+          });
+        }
+      }
+    });
+  }
+
+  @ReactMethod
+  public void disposeModule(Promise promise) {
+    Log.d(NAME, "disposeModule()");
+
+    gatt.dispose();
+    gatt = null;
+
+    scanner.dispose();
+    scanner = null;
+
+    emitter = null;
+
+    Log.i(NAME, "module disposed correctly :)");
     promise.resolve(null);
   }
 
   @ReactMethod
   public void scanStart(ReadableArray filterUuid, Promise promise) {
+    Log.d(NAME, String.format("scanStart(%s)", filterUuid));
+
+    if (scanner == null) {
+      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      return;
+    }
+
     PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
     try {
       List<String> filter = new ArrayList<>();
@@ -78,6 +149,13 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void scanStop(Promise promise) {
+    Log.d(NAME, "scanStop()");
+
+    if (scanner == null) {
+      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      return;
+    }
+
     PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
     try {
       scanner.stop();
@@ -89,7 +167,12 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void connect(String id, Double mtu, Promise promise) {
-    Log.d(NAME, String.format("call connect(%s, %f)", id, mtu));
+    Log.d(NAME, String.format("connect(%s, %f)", id, mtu));
+
+    if (gatt == null) {
+      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      return;
+    }
 
     PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
     try {
@@ -101,7 +184,12 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void disconnect(Promise promise) {
-    Log.d(NAME, "call disconnect()");
+    Log.d(NAME, "disconnect()");
+
+    if (gatt == null) {
+      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      return;
+    }
 
     PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
     try {
@@ -112,8 +200,30 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void readRSSI(Promise promise) {
+    Log.d(NAME, "readRSSI()");
+
+    if (gatt == null) {
+      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      return;
+    }
+
+    PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
+    try {
+      gatt.readRSSI(operation);
+    } catch (Exception e) {
+      operation.fail(e);
+    }
+  }
+
+  @ReactMethod
   public void read(String service, String characteristic, Double size, Promise promise) {
-    Log.d(NAME, String.format("call read(%s, %s, %f)", service, characteristic, size));
+    Log.d(NAME, String.format("read(%s, %s, %f)", service, characteristic, size));
+
+    if (gatt == null) {
+      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      return;
+    }
 
     PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
     try {
@@ -125,7 +235,12 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void write(String service, String characteristic, String value, Double chunkSize, Promise promise) {
-    Log.d(NAME, String.format("call write(%s, %s, %s, %f)", service, characteristic, value, chunkSize));
+    Log.d(NAME, String.format("write(%s, %s, %s, %f)", service, characteristic, value, chunkSize));
+
+    if (gatt == null) {
+      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      return;
+    }
 
     PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
     try {
@@ -138,7 +253,12 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void subscribe(String service, String characteristic, Promise promise) {
-    Log.d(NAME, String.format("call subscribe(%s, %s)", service, characteristic));
+    Log.d(NAME, String.format("subscribe(%s, %s)", service, characteristic));
+
+    if (gatt == null) {
+      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      return;
+    }
 
     PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
     try {
@@ -151,7 +271,12 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void unsubscribe(String service, String characteristic, Promise promise) {
-    Log.d(NAME, String.format("call unsubscribe(%s, %s)", service, characteristic));
+    Log.d(NAME, String.format("unsubscribe(%s, %s)", service, characteristic));
+
+    if (gatt == null) {
+      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      return;
+    }
 
     PromiseAsyncOperation operation = new PromiseAsyncOperation(promise);
     try {
@@ -162,15 +287,14 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     }
   }
 
+  // methods required for React Native NativeEventEmitter to work
   @ReactMethod
   public void addListener(String eventName) {
-    listenerCount += 1;
-    Log.i(NAME, String.format("listener registered for event: %s num listeners: %d", eventName, listenerCount));
+    Log.i(NAME, String.format("listener registered for event: %s", eventName));
   }
 
   @ReactMethod
   public void removeListeners(Integer count) {
-    listenerCount -= count;
-    Log.i(NAME, String.format("%d listener removed, num listeners: %d", count, listenerCount));
+    Log.i(NAME, String.format("%d listener removed", count));
   }
 }

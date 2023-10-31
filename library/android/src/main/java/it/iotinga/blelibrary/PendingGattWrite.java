@@ -38,14 +38,14 @@ public class PendingGattWrite extends PendingGattOperation {
   }
 
   @RequiresPermission("android.permission.BLUETOOTH_CONNECT")
-  public void doWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+  public void firstWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
     boolean result = characteristic.setValue(getNextChunk());
     if (!result) {
-      operation.fail(new BleException("GattError", "setValue failed"));
+      operation.fail(new BleException(BleLibraryModule.ERROR_GATT, "setValue failed"));
     } else {
       result = gatt.writeCharacteristic(characteristic);
       if (!result) {
-        operation.fail(new BleException("GattError", "writeCharacteristic failed"));
+        operation.fail(new BleException(BleLibraryModule.ERROR_GATT, "writeCharacteristic failed"));
       }
     }
   }
@@ -62,9 +62,9 @@ public class PendingGattWrite extends PendingGattOperation {
       progress.putString("characteristic", charUuid);
       progress.putInt("total", bytes.length);
       progress.putInt("current", writtenBytes);
-      emitter.emit(EventType.WRITE_PROGRESS, progress);
+      emitter.emit(EventEmitter.EVENT_WRITE_PROGRESS, progress);
 
-      doWrite(gatt, characteristic);
+      firstWrite(gatt, characteristic);
     } else {
       operation.complete();
     }

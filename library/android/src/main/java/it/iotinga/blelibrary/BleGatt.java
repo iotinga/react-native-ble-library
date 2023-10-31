@@ -7,4 +7,7 @@ public interface BleGatt {
   void write(AsyncOperation operation, String service, String characteristic, byte[] value, int chunkSize) throws BleException;
   void subscribe(String service, String characteristic) throws BleException;
   void unsubscribe(String service, String characteristic) throws BleException;
+  void readRSSI(AsyncOperation operation) throws BleException;
+  void dispose();
 }
+

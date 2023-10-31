@@ -32,26 +32,26 @@ public class BleScannerImpl implements BleScanner {
       Log.i(TAG, "starting scan");
 
       List<ScanFilter> filters = null;
-      int callbackType = ScanSettings.CALLBACK_TYPE_ALL_MATCHES;
-      if (filter.size() > 0) {
-        // this type of callback is supported only if a scan filter is selected
-        callbackType = ScanSettings.CALLBACK_TYPE_FIRST_MATCH | ScanSettings.CALLBACK_TYPE_MATCH_LOST;
+      ScanSettings.Builder settings = new ScanSettings.Builder()
+        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
+        .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE);
+
+      boolean hasScanFilter = filter.size() > 0;
+      if (hasScanFilter) {
+        settings.setCallbackType(ScanSettings.CALLBACK_TYPE_FIRST_MATCH | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
         filters = new ArrayList<>();
         for (String serviceUuid : filter) {
           Log.d(TAG, "adding filter UUID: " + serviceUuid);
           ParcelUuid uuid = ParcelUuid.fromString(serviceUuid);
           filters.add(new ScanFilter.Builder().setServiceUuid(uuid).build());
         }
+      } else {
+        // avoid flooding JS with events
+        settings.setReportDelay(SCAN_DELAY_MS);
+        settings.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES);
       }
 
-      ScanSettings settings = new ScanSettings.Builder()
-        .setReportDelay(SCAN_DELAY_MS)
-        .setCallbackType(callbackType)
-        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-        .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-        .build();
-
-      scanner.startScan(filters, settings, callback);
+      scanner.startScan(filters, settings.build(), callback);
       isScanActive = true;
     } else {
       Log.w(TAG, "scan is already started");
@@ -68,5 +68,12 @@ public class BleScannerImpl implements BleScanner {
     } else {
       Log.w(TAG, "scan is already stopped");
     }
+  }
+
+  @Override
+  @RequiresPermission(value = "android.permission.BLUETOOTH_SCAN")
+  public void dispose() {
+    scanner.stopScan(callback);
+    isScanActive = false;
   }
 }

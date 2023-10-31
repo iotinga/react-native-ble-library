@@ -25,7 +25,7 @@ public class PendingGattConnect extends PendingGattOperation {
     }
     if (!result) {
       context.setConnectionState(ConnectionState.DISCONNECTED);
-      operation.fail(new BleException("driver busy"));
+      operation.fail(new BleException(BleLibraryModule.ERROR_GATT, "operation returned false"));
     }
   }
 
@@ -35,7 +35,7 @@ public class PendingGattConnect extends PendingGattOperation {
     boolean result = gatt.discoverServices();
     if (!result) {
       context.setConnectionState(ConnectionState.DISCONNECTED);
-      operation.fail(new BleException("driver busy"));
+      operation.fail(new BleException(BleLibraryModule.ERROR_GATT, "operation returned false"));
     }
   }
 

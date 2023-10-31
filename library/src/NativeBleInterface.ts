@@ -1,6 +1,7 @@
 import { NativeEventEmitter } from 'react-native'
 import {
   BleNativeEvent,
+  type BleServicesInfo,
   type IBleNativeEventListener,
   type IBleNativeModule,
   type INativeBleInterface,
@@ -23,8 +24,12 @@ function wrap<T extends Array<unknown>, R>(name: string, fn: (...args: T) => Pro
 export class NativeBleInterface implements INativeBleInterface {
   constructor(private readonly nativeModule: IBleNativeModule, private readonly eventEmitter: NativeEventEmitter) {}
 
-  ping(): Promise<void> {
-    return wrap('ping', this.nativeModule.ping)
+  initModule(): Promise<void> {
+    return wrap('initModule', this.nativeModule.initModule)
+  }
+
+  disposeModule(): Promise<void> {
+    return wrap('disposeModule', this.nativeModule.disposeModule)
   }
 
   scanStart(serviceUuids?: string[] | undefined): Promise<void> {
@@ -35,7 +40,7 @@ export class NativeBleInterface implements INativeBleInterface {
     return wrap('scanStop', this.nativeModule.scanStop)
   }
 
-  connect(id: string, mtu: number): Promise<void> {
+  connect(id: string, mtu: number): Promise<BleServicesInfo> {
     return wrap('connect', this.nativeModule.connect, id, mtu)
   }
 
@@ -59,11 +64,15 @@ export class NativeBleInterface implements INativeBleInterface {
     return wrap('unsubscribe', this.nativeModule.unsubscribe, service, characteristic)
   }
 
+  readRSSI(): Promise<number> {
+    return wrap('readRSSI', this.nativeModule.readRSSI)
+  }
+
   addListener(listener: IBleNativeEventListener): () => void {
     console.debug('[NativeBleInterface] adding listeners')
 
     const subscriptions = [
-      this.eventEmitter.addListener(BleNativeEvent.PONG, listener.onPong.bind(listener)),
+      this.eventEmitter.addListener(BleNativeEvent.INIT_DONE, listener.onInitDone.bind(listener)),
       this.eventEmitter.addListener(BleNativeEvent.ERROR, listener.onError.bind(listener)),
       this.eventEmitter.addListener(BleNativeEvent.SCAN_RESULT, listener.onScanResult.bind(listener)),
       this.eventEmitter.addListener(BleNativeEvent.CHAR_VALUE_CHANGED, listener.onCharValueChanged.bind(listener)),

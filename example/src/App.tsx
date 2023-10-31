@@ -3,22 +3,17 @@ import {
   BleManagerFactory,
   BleManagerProvider,
   useBleConnection,
-  useBlePermissions,
 } from '@iotinga/react-native-ble-library'
 import React, { useMemo, useState } from 'react'
+import { SafeAreaView } from 'react-native'
 import { ConnectionScreen } from './ConnectionScreen'
-import { PermissionScreen } from './PermissionScreen'
 import { ScanScreen } from './ScanScreen'
 import { ViewScreen } from './ViewScreen'
 
 function ExampleComponent() {
-  const [permissionGranted] = useBlePermissions()
   const [connectionState] = useBleConnection()
   const [deviceId, setDeviceId] = useState<string>()
 
-  if (!permissionGranted) {
-    return <PermissionScreen />
-  }
   if (deviceId === undefined) {
     return <ScanScreen onSelectDevice={setDeviceId} />
   }
@@ -33,7 +28,9 @@ export default function App() {
 
   return (
     <BleManagerProvider manager={bleManager}>
-      <ExampleComponent />
+      <SafeAreaView style={{ backgroundColor: '#ffffff', flex: 1 }}>
+        <ExampleComponent />
+      </SafeAreaView>
     </BleManagerProvider>
   )
 }

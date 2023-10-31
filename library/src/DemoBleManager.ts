@@ -15,6 +15,7 @@ export class DemoBleManager implements IBleManager {
   constructor(demoState: DemoState) {
     this.state = {
       ready: true,
+      enabled: true,
       permission: {
         granted: true,
       },
@@ -30,6 +31,12 @@ export class DemoBleManager implements IBleManager {
       },
       services: demoState.services,
     }
+  }
+
+  async init(): Promise<void> {}
+
+  async getRSSI(): Promise<number> {
+    return -60
   }
 
   private setState(state: Partial<BleManagerState>): void {
