@@ -580,6 +580,9 @@ RCT_EXPORT_METHOD(subscribe:(NSString *)serviceUuid
         if (characteristic == nil) {
             NSLog(@"[BleLibrary] service %@ characteristic %@ not found", serviceUuid, characteristicUuid);
             reject(ErrorInvalidArguments, @"characteristic not found on device", nil);
+        } else if (characteristic.isNotifying) {
+            NSLog(@"[BleLibrary] notifications are already enabled");
+            resolve(nil);
         } else {
             NSLog(@"[BleLibrary] waiting for callback didUpdateNotificationStateForCharacteristic");
             [self setPromise:resolve reject:reject];
@@ -606,6 +609,9 @@ RCT_EXPORT_METHOD(unsubscribe:(NSString *)serviceUuid
         if (characteristic == nil) {
             NSLog(@"[BleLibrary] service %@ characteristic %@ not found", serviceUuid, characteristicUuid);
             reject(ErrorInvalidArguments, @"characteristic not found on device", nil);
+        } else if (!characteristic.isNotifying) {
+            NSLog(@"[BleLibrary] notifications are already disabled");
+            resolve(nil);
         } else {
             NSLog(@"[BleLibrary] waiting for callback didUpdateNotificationStateForCharacteristic");
             [self setPromise:resolve reject:reject];

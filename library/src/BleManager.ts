@@ -286,9 +286,17 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
   }
 
   write(characteristic: IBleChar, value: Buffer): Promise<void> {
-    console.info(`[BleManager] enqueue write(${characteristic}, ${value.subarray(0, 50)} (len: ${value.length}))`)
+    console.info(
+      `[BleManager] enqueue write(${characteristic}, ${value.subarray(0, 50).toString('base64')} (len: ${
+        value.length
+      }))`
+    )
     return this.sequencer.execute(async () => {
-      console.info(`[BleManager] execute write(${characteristic}, ${value.subarray(0, 50)} (len: ${value.length})`)
+      console.info(
+        `[BleManager] execute write(${characteristic}, ${value.subarray(0, 50).toString('base64')} (len: ${
+          value.length
+        })`
+      )
       if (this.state.connection.state === BleConnectionState.Connected) {
         this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
           writeProgress: {
@@ -349,7 +357,9 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
     const callback = this.state.services[data.service]?.[data.characteristic]?.callback
     const value = Buffer.from(data.value, 'base64')
     if (callback === undefined || callback(value)) {
-      console.info(`[BleManager] char value changed: ${value.subarray(0, 50)} (len: ${value.length}`, data)
+      console.info(
+        `[BleManager] char value changed: ${value.subarray(0, 50).toString('base64')} (len: ${value.length})`
+      )
       this.setChar(data.service, data.characteristic, {
         value,
       })
