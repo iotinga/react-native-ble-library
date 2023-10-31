@@ -71,6 +71,13 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
       try {
         await this.nativeInterface.initModule()
         console.log('[BleManager] module initialized')
+        this.setState({
+          ready: true,
+          enabled: true,
+          permission: {
+            granted: true,
+          },
+        })
       } catch (e: any) {
         console.error('[BleManager] failed to initialize module', e)
         if (e.code === BleErrorCode.BleNotEnabledError) {
