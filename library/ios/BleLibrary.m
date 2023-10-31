@@ -444,16 +444,15 @@ RCT_EXPORT_METHOD(write:(NSString *)serviceUuid
             reject(ErrorInvalidArguments, @"characteristic not found on device", nil);
         } else {
             NSData *data = [[NSData alloc] initWithBase64EncodedString:value options:0];
-            NSLog(@"[BleLibrary] requesting read for %lu bytes", data.length);
+            NSLog(@"[BleLibrary] requesting write for %lu bytes", data.length);
 
             self.write = [[PendingWrite alloc] init:data chunkSize:chunkSize.unsignedIntValue];
 
             // waiting for callback didWriteValueForCharacteristic
             [self setPromise:resolve reject:reject];
-            [self.peripheral writeValue:data forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+            [self.peripheral writeValue:[self.write getChunk] forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
         }
     }
-
 }
 
 // callback that is invoked after a write request

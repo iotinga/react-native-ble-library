@@ -35,7 +35,7 @@ export type BleCharacteristic = {
   value?: Buffer
   writeProgress?: BleProgressIndication
   readProgress?: BleProgressIndication
-  filterFn?: (value: Buffer) => boolean
+  callback?: (value: Buffer) => boolean
 }
 
 export enum BleScanState {

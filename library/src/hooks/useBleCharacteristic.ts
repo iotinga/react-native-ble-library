@@ -4,8 +4,7 @@ import { useBleManager } from './useBleManager'
 
 export function useBleCharacteristic(
   characteristic: IBleChar,
-  subscribe = false,
-  filterFn?: (value: Buffer) => boolean
+  subscribe = false
 ): [Buffer | undefined, (value: Buffer) => Promise<void>] {
   const [state, manager] = useBleManager()
 
@@ -19,7 +18,7 @@ export function useBleCharacteristic(
 
   useEffect(() => {
     if (subscribe) {
-      manager.subscribe(characteristic, filterFn)
+      manager.subscribe(characteristic)
 
       return () => {
         manager.unsubscribe(characteristic)
@@ -27,7 +26,7 @@ export function useBleCharacteristic(
     }
 
     return undefined
-  }, [manager, subscribe, characteristic, filterFn])
+  }, [manager, subscribe, characteristic])
 
   const setValue = (value: Buffer) => {
     return manager.write(characteristic, value)
