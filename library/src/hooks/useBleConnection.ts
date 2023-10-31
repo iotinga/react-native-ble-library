@@ -8,11 +8,11 @@ export function useBleConnection(): [
   const [state, manager] = useBleManager()
 
   const connect = (id: string, mtu?: number) => {
-    manager.connect(id, mtu)
+    return manager.connect(id, mtu)
   }
 
   const disconnect = () => {
-    manager.disconnect()
+    return manager.disconnect()
   }
 
   return [state.connection.state, { connect, disconnect }]
