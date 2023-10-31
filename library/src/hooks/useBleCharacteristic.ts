@@ -29,7 +29,7 @@ export function useBleCharacteristic(
   }, [manager, subscribe, characteristic])
 
   const setValue = (value: Buffer) => {
-    manager.write(characteristic, value)
+    return manager.write(characteristic, value)
   }
 
   return [char?.value, setValue]

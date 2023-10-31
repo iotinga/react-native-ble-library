@@ -15,8 +15,6 @@ jobs:
   start-build:
     name: Build and publish ble library
     runs-on: linux-pve
-    outputs:
-      version: ${{ env.IOTINGA_VERSION }}
     steps:
       - uses: actions/checkout@v3
         with:
