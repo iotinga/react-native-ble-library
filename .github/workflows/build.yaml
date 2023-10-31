@@ -1,0 +1,38 @@
+name: Build and publish BLE library
+on:
+  push:
+    branches:
+      - master
+      - hotfix/*
+
+env:
+  IOTINGA_PRIVATE_ZIP_PASSWORD: ${{ secrets.IOTINGA_PRIVATE_ZIP_PASSWORD }}
+  IOTINGA_BUILD_NUMBER: ${{ github.run_number }}
+  IOTINGA_RUN_ID: github-actions-${{ github.run_number }}
+  IOTINGA_CLI_URL: https://iotinga-deliverables.s3.eu-west-1.amazonaws.com/repo/python/iotinga_cli/iotinga_cli-production-py3-none-any.whl
+
+jobs:
+  start-build:
+    name: Build and publish ble library
+    runs-on: linux-pve
+    outputs:
+      version: ${{ env.IOTINGA_VERSION }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Iotinga CLI
+        run: python3 -m pip install --user "${{ env.IOTINGA_CLI_URL }}"
+
+      - name: Run prepare
+        run: python3 -m iotinga ci prepare
+
+      - name: Build ble-library
+        run: python3 -m iotinga ci build ble-library

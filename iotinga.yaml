@@ -1,0 +1,19 @@
+version: 1
+project: BLE-LIBRARY@IOTINGA
+remote_url: https://github.com/iotinga/react-native-ble-library
+
+prepare:
+  - shell:
+      cwd: library
+      command: npm version $IOTINGA_VERSION
+  - shell: git push
+    continue-on-error: true
+
+artifacts:
+  - name: ble-library
+    cwd: library/
+    build:
+      - shell: npm ci
+      - shell: npm --userconfig ../private/npmrc publish
+
+deliverables: []
