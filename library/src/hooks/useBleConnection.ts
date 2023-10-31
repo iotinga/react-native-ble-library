@@ -3,7 +3,7 @@ import { useBleManager } from './useBleManager'
 
 export function useBleConnection(): [
   BleConnectionState,
-  { connect: (id: string, mtu?: number) => void; disconnect: () => void }
+  { connect: (id: string, mtu?: number) => Promise<void>; disconnect: () => Promise<void> }
 ] {
   const [state, manager] = useBleManager()
 

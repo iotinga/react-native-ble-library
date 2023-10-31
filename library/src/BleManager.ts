@@ -18,8 +18,8 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
   private readonly callbacks = new Set<(state: BleManagerState) => void>()
   private readonly removeAllListeners: () => void
   private state: BleManagerState = {
-    ready: false,
-    enabled: false,
+    ready: null,
+    enabled: null,
     permission: {
       granted: null,
     },

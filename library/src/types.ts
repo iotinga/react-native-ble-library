@@ -54,8 +54,8 @@ export enum BleConnectionState {
 
 export type BleManagerState = {
   /** true if the module is ready and connected with the native driver */
-  ready: boolean
-  enabled: boolean
+  ready: boolean | null
+  enabled: boolean | null
   permission: {
     granted: boolean | null
   }

@@ -5,7 +5,7 @@ import { useBleManager } from './useBleManager'
 export function useBleCharacteristic(
   characteristic: IBleChar,
   subscribe = false
-): [Buffer | undefined, (value: Buffer) => void] {
+): [Buffer | undefined, (value: Buffer) => Promise<void>] {
   const [state, manager] = useBleManager()
 
   const char = state.services[characteristic.getServiceUuid()]?.[characteristic.getCharUuid()]
