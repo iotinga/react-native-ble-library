@@ -95,10 +95,10 @@ RCT_EXPORT_METHOD(disposeModule:(RCTPromiseResolveBlock)resolve
 
 -(void)centralManagerDidUpdateState:(nonnull CBCentralManager *)central {
     NSLog(@"[BleLibrary] CBCentralManager state changed %ld", (long)[central state]);
-    
+
     switch ([central state]) {
         case CBManagerStateUnknown:
-        case CBManagerStateResetting:            
+        case CBManagerStateResetting:
             NSLog(@"[BleLibrary] BLE unsupported or internal error");
             [self reject:ErrorInvalidState message:@"invalid state" error:nil];
             self.manager = nil;
@@ -135,7 +135,7 @@ RCT_EXPORT_METHOD(scanStart:(NSArray<NSString *> *)serviceUuids
                   reject:(RCTPromiseRejectBlock)reject)
 {
     NSLog(@"[BleLibrary] scanStart(%@)", serviceUuids);
-    
+
     if (self.manager == nil) {
         NSLog(@"[BleLibrary] manager is not initialized");
         reject(ErrorNotInitialized, @"call initModule first", nil);
@@ -166,7 +166,7 @@ RCT_EXPORT_METHOD(scanStop:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
     NSLog(@"[BleLibrary] scanStop()");
-    
+
     if (self.manager == nil) {
         NSLog(@"[BleLibrary] manager is not initialized");
         reject(ErrorNotInitialized, @"call initModule first", nil);
@@ -190,7 +190,7 @@ didDiscoverPeripheral:(CBPeripheral *)peripheral
     advertisementData:(NSDictionary<NSString *,id> *)advertisementData
                  RSSI:(NSNumber *)RSSI {
     NSLog(@"[BleLibrary] discovered peripheral %@ (adv data: %@)", peripheral, advertisementData);
-    
+
     NSDictionary *result = @{
         @"devices": @[
             @{
@@ -201,7 +201,7 @@ didDiscoverPeripheral:(CBPeripheral *)peripheral
             },
         ],
     };
-    
+
     NSLog(@"[BleLibrary] sending scan result to JS %@", result);
     [self sendEventWithName:EventScanResult body:result];
 }
@@ -214,7 +214,7 @@ RCT_EXPORT_METHOD(connect:(NSString *)deviceId
                   reject:(RCTPromiseRejectBlock)reject)
 {
     NSLog(@"[BleLibrary] connect(%@, %d)", deviceId, mtu.intValue);
-    
+
     if (self.manager == nil) {
         NSLog(@"[BleLibrary] module is not initalized");
         reject(ErrorNotInitialized, @"call initModule first", nil);
@@ -242,11 +242,11 @@ RCT_EXPORT_METHOD(connect:(NSString *)deviceId
                 // note: it's important to keep a reference for the peripherial, otherwise the manager will
                 // cancel the connection!
                 self.peripheral = peripherals[0];
-                
+
                 NSLog(@"[BleLibrary] requesting connect");
                 [self setPromise:resolve reject:reject];
                 [self.manager connectPeripheral:self.peripheral options:nil];
-                
+
                 // the
                 self.timeout = [NSTimer timerWithTimeInterval:CONNECTION_TIMEOUT_SECONDS target:self selector:@selector(onConnectionTimeout) userInfo:nil repeats:NO];
                 [[NSRunLoop mainRunLoop] addTimer:self.timeout forMode:NSDefaultRunLoopMode];
@@ -257,16 +257,18 @@ RCT_EXPORT_METHOD(connect:(NSString *)deviceId
 
 -(void)onConnectionTimeout {
     NSLog(@"[BleLibrary] connection timed out");
-    
-    if (self.manager != nil && self.peripheral != nil) {
+
+    if (self.manager != nil && self.peripheral != nil && [self.peripheral state] == CBPeripheralStateConnecting) {
         NSLog(@"[BleLibrary] canceling peripherial connection");
-        
+
         [self.manager cancelPeripheralConnection:self.peripheral];
-        
+
         self.peripheral = nil;
+
+        [self reject:ErrorConnection message:@"connection timed out" error:nil];
     }
 
-    [self reject:ErrorConnection message:@"connection timed out" error:nil];
+    self.timeout = nil;
 }
 
 // callback that is invoked when a connection with a device fails
@@ -274,10 +276,9 @@ RCT_EXPORT_METHOD(connect:(NSString *)deviceId
 didFailToConnectPeripheral:(CBPeripheral *)peripheral
                 error:(NSError *)error {
     NSLog(@"[BleLibrary] connection to peripheral %@ failed (error: %@)", peripheral, error);
-    
-    [self.timeout invalidate];
+
     self.peripheral = nil;
-    
+
     [self reject:ErrorConnection message:@"error connecting to peripheral" error:error];
 }
 
@@ -285,8 +286,6 @@ didFailToConnectPeripheral:(CBPeripheral *)peripheral
 -(void)centralManager:(CBCentralManager *)central
  didConnectPeripheral:(CBPeripheral *)peripheral {
     NSLog(@"[BleLibrary] connected to peripheral %@. Start service discovery", peripheral);
-    
-    [self.timeout invalidate];
 
     // after the connection, before saying to the app that the connection is done, I start the service discovery
     [peripheral setDelegate:self];
@@ -298,13 +297,13 @@ didFailToConnectPeripheral:(CBPeripheral *)peripheral
 didDiscoverServices:(NSError *)error {
     if (error == nil) {
         NSLog(@"[BleLibrary] service discovery complete");
-        
+
         NSArray<CBService *> *services = peripheral.services;
         for (CBService *service in services) {
             NSLog(@"[BleLibrary] - service %@, discovering characteristics", service.UUID);
             [peripheral discoverCharacteristics:nil forService:service];
         }
-        
+
         NSLog(@"[BleLibrary] service discovery done, now waiting to discover all characteristics");
     } else {
         NSLog(@"[BleLibrary] error discovering services (error: %@)", error);
@@ -323,14 +322,14 @@ didDiscoverCharacteristicsForService:(nonnull CBService *)service
         for (CBCharacteristic *characteristic in service.characteristics) {
             NSLog(@"[BleLibrary] - characteristic %@ properties: %lu", characteristic.UUID, characteristic.properties);
         }
-        
+
         bool charRemainingToDiscover = NO;
         for (CBService *service in peripheral.services) {
             if (service.characteristics == nil) {
                 charRemainingToDiscover = YES;
             }
         }
-        
+
         if (!charRemainingToDiscover) {
             NSLog(@"[BleLibrary] all characteristics discovered");
             NSMutableArray<NSDictionary *> *services = [[NSMutableArray alloc] init];
@@ -348,7 +347,7 @@ didDiscoverCharacteristicsForService:(nonnull CBService *)service
                     @"isPrimary": [NSNumber numberWithBool:service.isPrimary],
                 }];
             }
-            
+
             [self resolve:@{
                 @"services": services,
             }];
@@ -363,7 +362,7 @@ RCT_EXPORT_METHOD(diconnect:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
     NSLog(@"[BleLibrary] disconnect()");
-    
+
     if (![self isConnected]) {
         NSLog(@"[BleLibrary] device not connected");
         reject(ErrorNotConnected, @"call connect first", nil);
@@ -392,7 +391,7 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
         };
         [self sendEventWithName:EventError body:body];
     }
-    
+
     self.peripheral = nil;
 }
 
@@ -431,7 +430,7 @@ RCT_EXPORT_METHOD(write:(NSString *)serviceUuid
                   reject:(RCTPromiseRejectBlock)reject)
 {
     NSLog(@"[BleLibrary] write(%@, %@, %lu)", serviceUuid, characteristicUuid, chunkSize.unsignedLongValue);
-    
+
     if (![self isConnected]) {
         NSLog(@"[BleLibrary] device not connected");
         reject(ErrorNotConnected, @"call connect first", nil);
@@ -454,7 +453,7 @@ RCT_EXPORT_METHOD(write:(NSString *)serviceUuid
             [self.peripheral writeValue:data forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
         }
     }
-    
+
 }
 
 // callback that is invoked after a write request
@@ -472,11 +471,11 @@ didWriteValueForCharacteristic:(CBCharacteristic *)characteristic
                 @"total": [NSNumber numberWithUnsignedInt:self.write.size],
             };
             [self sendEventWithName:EventWriteProgress body:data];
-            
+
             [peripheral writeValue:[self.write getChunk] forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
         } else {
             NSLog(@"[BleLibrary] write is completed! Resolving Promise");
-            
+
             [self resolve:nil];
             self.write = nil;
         }
@@ -510,9 +509,9 @@ RCT_EXPORT_METHOD(read:(NSString *)serviceUuid
             reject(ErrorInvalidArguments, @"characteristic not found on device", nil);
         } else {
             NSLog(@"[BleLibrary] requesting read for characteristic");
-            
+
             self.read = [[PendingRead alloc] init:size.unsignedIntValue characteristic:characteristic];
-            
+
             [self setPromise:resolve reject:reject];
             [self.peripheral readValueForCharacteristic:characteristic];
         }
@@ -531,11 +530,11 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
         [self reject:ErrorGATT message:@"error reading characteristic" error:error];
     } else if (self.read != nil && [self.read.characteristic isEqual:characteristic]) {
         NSLog(@"[BleLibrary] read progress for characteristic %@", characteristic);
-        
+
         [self.read putChunk:[characteristic value]];
         if ([self.read hasMoreData]) {
             NSLog(@"[BleLibrary] need to receive more data (%ld/%ld) for characteristic, notify JS", (long)self.read.read, (long)self.read.size);
-            
+
             NSDictionary *data = @{
                 @"characteristic": characteristic.UUID.UUIDString,
                 @"service": characteristic.service.UUID.UUIDString,
@@ -543,7 +542,7 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
                 @"total": [NSNumber numberWithUnsignedInt:self.read.size],
             };
             [self sendEventWithName:EventReadProgress body:data];
-            
+
             NSLog(@"[BleLibrary] triggering another read, and waiting for didUpdateValueForCharacteristic");
             [peripheral readValueForCharacteristic:characteristic];
         } else {
@@ -570,7 +569,7 @@ RCT_EXPORT_METHOD(subscribe:(NSString *)serviceUuid
                   reject:(RCTPromiseRejectBlock)reject)
 {
     NSLog(@"[BleLibrary] subscribe(%@, %@)", serviceUuid, characteristicUuid);
-    
+
     if (![self isConnected]) {
         NSLog(@"[BleLibrary] device not connected");
         reject(ErrorNotConnected, @"call connect first", nil);
@@ -652,7 +651,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
             }
         }
     }
-    
+
     return nil;
 }
 
@@ -661,7 +660,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     if ([self hasPendingPromise]) {
         NSLog(@"[BleLibrary] resolving promise with %@", data);
         self.resolve(data);
-        
+
         self.resolve = nil;
         self.reject = nil;
     } else {
@@ -674,7 +673,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     if ([self hasPendingPromise]) {
         NSLog(@"[BleLibrary] rejecting promise with code:%@ message:%@ error:%@", code, message, error);
         self.reject(code, message, error);
-        
+
         self.resolve = nil;
         self.reject = nil;
     } else {
