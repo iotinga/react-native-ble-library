@@ -212,6 +212,7 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
               state: BleConnectionState.Disconnected,
             },
           })
+          throw e
         }
       } else {
         console.warn('[BleManager] already connected')
@@ -249,6 +250,7 @@ export class BleManager implements IBleManager, IBleNativeEventListener {
               state: BleConnectionState.Unknown,
             },
           })
+          throw e
         }
       } else {
         console.warn('[BleManager] already disconnected')
