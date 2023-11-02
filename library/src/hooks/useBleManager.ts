@@ -1,17 +1,12 @@
-import { useContext, useEffect, useState } from 'react'
-import type { BleManagerState, IBleManager } from '../types'
+import { useContext } from 'react'
 import { BleManagerContext } from '../contexts/BleManagerContext'
+import type { IBleManager } from '../types'
 
-export function useBleManager(): [BleManagerState, IBleManager] {
-  const bleManager = useContext(BleManagerContext)
-  if (bleManager === null) {
+export function useBleManager(): IBleManager {
+  const manager = useContext(BleManagerContext)
+  if (manager === null) {
     throw new Error('useBleManager must be used within a BleManagerProvider')
   }
-  const [state, setState] = useState<BleManagerState>(bleManager.getState())
 
-  useEffect(() => {
-    return bleManager.onStateChange(setState)
-  }, [bleManager])
-
-  return [state, bleManager]
+  return manager
 }

@@ -1,16 +1,4 @@
-export enum BleErrorCode {
-  GenericError = 'BleGenericError',
-  DeviceDisconnected = 'BleDeviceDisconnected',
-  BleScanError = 'BleScanError',
-  BleNotEnabledError = 'BleNotEnabledError',
-  MissingPermissionError = 'BleMissingPermissionError',
-  GATTError = 'BleGATTError',
-  ConnectionError = 'BleConnectionError',
-  NotConnectedError = 'BleNotConnectedError',
-  NotInitializedError = 'BleNotInitializedError',
-  ModuleBusyError = 'BleModuleBusyError',
-  InvalidArgumentsError = 'ErrorInvalidArguments',
-}
+import type { BleError } from './errors'
 
 export type BleDeviceInfo = {
   /** ID of the device. On Android this is a MAC address, on iOS it's an opaque UUID */
@@ -22,66 +10,48 @@ export type BleDeviceInfo = {
   /** Signal strength of the discovered device */
   rssi: number
 
+  /** true if the device is available, false if device is no longer available (Android only) */
   available: boolean
 }
 
-export type BleProgressIndication = {
-  current: number
-  total: number
+export type Subscription = {
+  /** removes the subscription */
+  unsubscribe: () => void
 }
 
-export type BleCharacteristic = {
-  subscribed: boolean
-  value?: Buffer
-  writeProgress?: BleProgressIndication
-  readProgress?: BleProgressIndication
-  callback?: (value: Buffer) => boolean
+export const BleCharacteristicProperty = {
+  READ: 0x02,
+  WRITE_WITHOUT_RESPONSE: 0x04,
+  WRITE: 0x08,
+  NOTIFY: 0x10,
+  INDICATE: 0x20,
+} as const
+
+export type BleCharacteristicInfo = {
+  /** uuid of the characteristic */
+  uuid: string
+
+  /** bitmask of {@link BleCharacteristicProperty} */
+  properties: number
 }
 
-export enum BleScanState {
-  Stopped = 'stopped',
-  Scanning = 'scanning',
-  Starting = 'starting',
-  Stopping = 'stopping',
+export type BleServiceInfo = {
+  /** uuid of the service */
+  uuid: string
+
+  /** true if the service is a primary service */
+  isPrimary: boolean
+
+  /** list of the characteristics included in this service */
+  characteristics: BleCharacteristicInfo[]
 }
 
-export enum BleConnectionState {
-  Disconnected = 'disconnected',
-  Connecting = 'connecting',
-  Connected = 'connected',
-  Disconnecting = 'disconnecting',
-  Unknown = 'unknown',
-}
+export type BleConnectedDeviceInfo = {
+  /** ID of the device */
+  id: string
 
-export type BleManagerState = {
-  /** true if the module is ready and connected with the native driver */
-  ready: boolean | null
-  enabled: boolean | null
-  permission: {
-    granted: boolean | null
-  }
-  scan: {
-    state: BleScanState
-    serviceUuids?: string[]
-    discoveredDevices: BleDeviceInfo[]
-  }
-  connection: {
-    state: BleConnectionState
-    id: string
-    rssi: number
-  }
-  error?: {
-    code: BleErrorCode
-    message: string
-  }
-  services: Record<string, Record<string, BleCharacteristic>>
-}
-
-export type IBleChar = {
-  getServiceUuid(): string
-  getCharUuid(): string
-  getChunkSize(): number | undefined
-  getSize(): number | undefined
+  /** list of services exposed from the device */
+  services: BleServiceInfo[]
 }
 
 export interface IBleManager {
@@ -90,40 +60,51 @@ export interface IBleManager {
    * This does trigger the permission request on iOS/Android.
    * On iOS this method will fail if the BLE is not enabled, while on Android it
    * will try to enable it automatically (and rejects if it is not possible).
+   *
+   * @throws {BleError} in case of an error
    */
   init(): Promise<void>
 
   /**
-   * Registers a callback that is invoked each time the BleManager state changes.
-   * Typically only used internally by hooks.
-   */
-  onStateChange(callback: (state: BleManagerState) => void): () => void
-
-  /**
-   * Get the current BleManager state.
-   */
-  getState(): BleManagerState
-
-  /**
    * Start a BLE scan for the devices that expose the specified services.
+   *
+   * @param serviceUuids if not null returns only the devices that expose one of the specified services
+   * @param onDiscover callback invoked each time a new devices are discovered
+   * @param onError a callback that gets invoked when a scan error occurs
+   * @returns a subscription for the scan operation
+   * @throws {BleError} in case of an error
    */
-  scan(serviceUuid?: string[]): Promise<void>
-
-  /**
-   * Stops the scan, if previously started.
-   */
-  stopScan(): Promise<void>
+  scan(
+    serviceUuid: string[] | null | undefined,
+    onDiscover: (devices: BleDeviceInfo[]) => void,
+    onError?: (error: BleError) => void
+  ): Subscription
 
   /**
    * Connects to the device with the specified id (that is returned by the scan).
    * If mtu is specified the manager tries to request the specified MTU for the
    * device (if allowed by the operating system), otherwise the default (that
    * depends on the OS implementation) is used.
+   *
+   * @param id id of the device to connect to. Should correspond to one device found in a previous scan!
+   * @param mtu the MTU to set to the device when connecting. This is only relevant on Android,
+   *  since on iOS the MTU is negotiated automatically. If not specified uses the default from the BLE driver.
+   * @param onError callback that is invoked in case of connection error
+   * @return info of the connected device
+   * @throws {BleError} in case of an error
    */
-  connect(id: string, mtu?: number): Promise<void>
+  connect(id: string, mtu?: number, onError?: (error: BleError) => void): Promise<BleConnectedDeviceInfo>
 
   /**
-   * Disconnects a previously connected device.
+   * @return the connected device info if any, otherwise null
+   */
+  get device(): BleConnectedDeviceInfo | null
+
+  /**
+   * Disconnects a previously connected device, if any.
+   * Cancels any pending operation on the device immediately.
+   *
+   * @throws {BleError} in case of an error
    */
   disconnect(): Promise<void>
 
@@ -131,8 +112,20 @@ export interface IBleManager {
    * Request a read for the specified characteristics. If the characteristic has a
    * fixed size then multiple reads are performed till all the data associated with
    * the characteristic is received.
+   *
+   * @param service UUID of the service to read
+   * @param characteristic UUID of the characteristic to read
+   * @param size if specified read repeatedly till size bytes are received
+   * @param progress callback to report the read progress to the application
+   * @returns a promise that resolves with the read value
+   * @throws {BleError} in case of an error
    */
-  read(characteristic: IBleChar): Promise<void>
+  read(
+    service: string,
+    characteristic: string,
+    size?: number,
+    progress?: (current: number, total: number) => void
+  ): Promise<Buffer>
 
   /**
    * Requests a write for the specified characteristic. If the characteristic is chunked the
@@ -140,41 +133,77 @@ export interface IBleManager {
    * all the message is transmitted.
    * From one write to another we wait for the device to send an ACK to confirm it has
    * received the message chunk.
+   *
+   * @param service UUID of the service to write
+   * @param characteristic UUID of the characteristic to write
+   * @param value the value to write
+   * @param chunkSize if specified write at most chunkSize bytes at a time. If length of the data is
+   *  greater than chunk size it will perform multiple writes till all the data is written. Default: 512 bytes
+   * @param progress callback to report the write progress to the application
+   * @throws {BleError} in case of an error
    */
-  write(characteristic: IBleChar, value: Buffer): Promise<void>
+  write(
+    service: string,
+    characteristic: string,
+    value: Buffer,
+    chunkSize?: number,
+    progress?: (current: number, total: number) => void
+  ): Promise<void>
+
+  /**
+   * get the connected device RSSI
+   *
+   * @returns the RSSI value for the device
+   * @throws {BleError} in case of an error
+   */
+  getRSSI(): Promise<number>
 
   /**
    * Subscribes for notification of the specified (service, characteristic). Each time the
    * characteristic changes the state is automatically updated accordingly.
+   *
+   * @param service UUID of the service to write
+   * @param characteristic UUID of the characteristic to write
+   * @param onValueChanged callback invoked each time the characteristic changes.
+   * @param onError callback invoked when an error occurs
+   * @returns a subscription for the notification
+   * @throws {BleError} in case of an error
    */
-  subscribe(characteristic: IBleChar, filterFn?: (value: Buffer) => boolean): Promise<void>
+  subscribe(
+    service: string,
+    characteristic: string,
+    onValueChanged: (value: Buffer) => void,
+    onError?: (error: BleError) => void
+  ): Subscription
 
   /**
-   * Removes a previously set subscription for (service, characteristic)
-   */
-  unsubscribe(characteristic: IBleChar): Promise<void>
-
-  /**
-   * Call this method after having used the BleManager to release all the resources
+   * Call this method after having used the BleManager to release all the resources.
+   * Eventual connected devices will be disconnected and existing scan stopped.
+   * After this call do not attempt to use the BleManager instance without calling init() again!
    */
   dispose(): void
-
-  /**
-   * get the connected device RSSI
-   */
-  getRSSI(): Promise<number>
 }
 
 export type DemoState = {
-  services: Record<string, Record<string, BleCharacteristic>>
+  /** services exposed by the device */
+  services: BleServiceInfo[]
+
+  /** devices returned in fake discovery */
   devices: BleDeviceInfo[]
 }
 
-export interface IBleManagerFactory {
-  create(): IBleManager
+export interface ILogger {
+  debug(message: string, ...args: unknown[]): void
+  info(message: string, ...args: unknown[]): void
+  warn(message: string, ...args: unknown[]): void
+  error(message: string, ...args: unknown[]): void
 }
 
-export interface IPermissionManager<T> {
-  askPermission(permission: T | T[]): Promise<boolean>
-  hasPermission(permission: T | T[]): Promise<boolean>
+export interface IBleManagerFactory {
+  /**
+   * Creates a new instance of the BLE manager.
+   *
+   * @param logger optional logger to use for the new instance
+   */
+  create(logger?: ILogger): IBleManager
 }

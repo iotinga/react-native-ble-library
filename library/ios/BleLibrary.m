@@ -1,5 +1,10 @@
 #import "BleLibrary.h"
 
+// disable logging in production builds
+#ifndef DEBUG
+#define NSLog(...)
+#endif
+
 // error codes
 static NSString *const ErrorGeneric = @"BleGenericError";
 static NSString *const ErrorDeviceDisconnected = @"BleDeviceDisconnected";
@@ -28,6 +33,8 @@ static NSTimeInterval CONNECTION_TIMEOUT_SECONDS = 5.0;
 
 RCT_EXPORT_MODULE()
 
+#pragma mark - RN module interface
+
 // invoked when the first listener is registerd in the JS code
 -(void)startObserving {
     NSLog(@"[BleLibrary] NativeEventListener registed");
@@ -50,7 +57,37 @@ RCT_EXPORT_MODULE()
     ];
 }
 
+// called when the module is being unloaded
+-(void)invalidate {
+    NSLog(@"[BleLibrary] invalidating native module");
+    
+    [self dispose];
+    [super invalidate];
+}
+
 #pragma mark - module management
+
+-(void)dispose {
+    if (self.manager != nil) {
+        if (self.timeout) {
+            [self.timeout invalidate];
+            self.timeout = nil;
+        }
+        if ([self hasPendingPromise]) {
+            [self reject:ErrorGeneric message:@"module is shutting down" error:nil];
+        }
+        if ([self.manager isScanning]) {
+            NSLog(@"[BLeLibrary] stopping scan");
+            [self.manager stopScan];
+        }
+        if (self.isConnected) {
+            NSLog(@"[BleLibrary] disconnecting device");
+            [self.manager cancelPeripheralConnection:self.peripheral];
+            self.peripheral = nil;
+        }
+    }
+    self.manager = nil;
+}
 
 RCT_EXPORT_METHOD(initModule:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
@@ -72,31 +109,14 @@ RCT_EXPORT_METHOD(disposeModule:(RCTPromiseResolveBlock)resolve
 {
     NSLog(@"[BleLibrary] disposeModule()");
 
-    if (self.manager != nil) {
-        if (self.timeout) {
-            [self.timeout invalidate];
-        }
-        if ([self hasPendingPromise]) {
-            [self reject:ErrorGeneric message:@"module is shutting down" error:nil];
-        }
-        if ([self.manager isScanning]) {
-            NSLog(@"[BLeLibrary] stopping scan");
-            [self.manager stopScan];
-        }
-        if (self.isConnected) {
-            NSLog(@"[BleLibrary] disconnecting device");
-            [self.manager cancelPeripheralConnection:self.peripheral];
-            self.peripheral = nil;
-        }
-    }
-    self.manager = nil;
+    [self dispose];
     resolve(nil);
 }
 
 -(void)centralManagerDidUpdateState:(nonnull CBCentralManager *)central {
-    NSLog(@"[BleLibrary] CBCentralManager state changed %ld", (long)[central state]);
+    NSLog(@"[BleLibrary] CBCentralManager state changed %ld", central.state);
 
-    switch ([central state]) {
+    switch (central.state) {
         case CBManagerStateUnknown:
         case CBManagerStateResetting:
             NSLog(@"[BleLibrary] BLE unsupported or internal error");
@@ -173,7 +193,7 @@ RCT_EXPORT_METHOD(scanStop:(RCTPromiseResolveBlock)resolve
     } else if (![self isBlePoweredOn]) {
         NSLog(@"[BleLibrary] BLE is not enabled");
         reject(ErrorBleNotEnabled, @"BLE is not enabled", nil);
-    } else if ([self.manager isScanning]) {
+    } else if (self.manager.isScanning) {
         NSLog(@"[BleLibrary] stoping scan");
         [self.manager stopScan];
         NSLog(@"[BleLibrary] scan stopped");
@@ -195,7 +215,7 @@ didDiscoverPeripheral:(CBPeripheral *)peripheral
         @"devices": @[
             @{
                 @"id": peripheral.identifier.UUIDString.lowercaseString,
-                @"name": peripheral.name,
+                @"name": peripheral.name != nil ? peripheral.name : [NSNull alloc],
                 @"rssi": RSSI,
                 @"available": @YES,
             },
@@ -338,13 +358,13 @@ didDiscoverCharacteristicsForService:(nonnull CBService *)service
                 for (CBCharacteristic *characteristic in service.characteristics) {
                     [characteristics addObject:@{
                         @"uuid": characteristic.UUID.UUIDString.lowercaseString,
-                        @"properties": [NSNumber numberWithUnsignedLong:characteristic.properties],
+                        @"properties": @(characteristic.properties),
                     }];
                 }
                 [services addObject:@{
                     @"characteristics": characteristics,
                     @"uuid": service.UUID.UUIDString.lowercaseString,
-                    @"isPrimary": [NSNumber numberWithBool:service.isPrimary],
+                    @"isPrimary": @(service.isPrimary),
                 }];
             }
 
@@ -358,7 +378,7 @@ didDiscoverCharacteristicsForService:(nonnull CBService *)service
 }
 
 
-RCT_EXPORT_METHOD(diconnect:(RCTPromiseResolveBlock)resolve
+RCT_EXPORT_METHOD(disconnect:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
     NSLog(@"[BleLibrary] disconnect()");
@@ -379,15 +399,15 @@ RCT_EXPORT_METHOD(diconnect:(RCTPromiseResolveBlock)resolve
 -(void)centralManager:(CBCentralManager *)central
 didDisconnectPeripheral:(CBPeripheral *)peripheral
                 error:(NSError *)error {
-    if (error != nil && [self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] disconnected from peripheral %@ failed", peripheral);
+    if (error == nil) {
+        NSLog(@"[BleLibrary] disconnected from peripheral %@", peripheral);
         [self resolve:nil];
     } else {
         NSLog(@"[BleLibrary] disconnected from peripheral %@ failed (error: %@)", peripheral, error);
         NSDictionary *body = @{
             @"error": ErrorDeviceDisconnected,
             @"message": @"unexpected device disconnect",
-            @"nativeError": [error description],
+            @"nativeError": error.description,
         };
         [self sendEventWithName:EventError body:body];
     }
@@ -703,12 +723,12 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
 
 // true if a device is connected to the module
 -(bool)isConnected {
-    return self.peripheral != nil && [self.peripheral state] == CBPeripheralStateConnected;
+    return self.peripheral != nil && self.peripheral.state == CBPeripheralStateConnected;
 }
 
 // true if the manager is initialized
 -(bool)isBlePoweredOn {
-    return self.manager != nil && [self.manager state] == CBManagerStatePoweredOn;
+    return self.manager != nil && self.manager.state == CBManagerStatePoweredOn;
 }
 
 @end

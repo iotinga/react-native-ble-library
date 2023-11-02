@@ -1,36 +1,29 @@
-import {
-  BleConnectionState,
-  BleManagerFactory,
-  BleManagerProvider,
-  useBleConnection,
-} from '@iotinga/react-native-ble-library'
-import React, { useMemo, useState } from 'react'
-import { SafeAreaView } from 'react-native'
-import { ConnectionScreen } from './ConnectionScreen'
-import { ScanScreen } from './ScanScreen'
-import { ViewScreen } from './ViewScreen'
-
-function ExampleComponent() {
-  const [connectionState] = useBleConnection()
-  const [deviceId, setDeviceId] = useState<string>()
-
-  if (deviceId === undefined) {
-    return <ScanScreen onSelectDevice={setDeviceId} />
-  }
-  if (connectionState !== BleConnectionState.Connected) {
-    return <ConnectionScreen id={deviceId} />
-  }
-  return <ViewScreen />
-}
+import { BleManagerFactory, BleManagerProvider } from '@iotinga/react-native-ble-library'
+import { NavigationContainer } from '@react-navigation/native'
+import { StyleSheet } from 'react-native'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { Navigation } from './Navigation'
+import { useMemo } from 'react'
 
 export default function App() {
-  const bleManager = useMemo(() => new BleManagerFactory().create(), [])
+  const factory = useMemo(() => new BleManagerFactory(), [])
 
   return (
-    <BleManagerProvider manager={bleManager}>
-      <SafeAreaView style={{ backgroundColor: '#ffffff', flex: 1 }}>
-        <ExampleComponent />
-      </SafeAreaView>
-    </BleManagerProvider>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <BleManagerProvider factory={factory}>
+          <Navigation />
+        </BleManagerProvider>
+      </NavigationContainer>
+    </SafeAreaProvider>
   )
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+})

@@ -16,7 +16,7 @@ public class ConnectionContext {
     if (pendingGattOperation == null || !pendingGattOperation.isPending()) {
       pendingGattOperation = operation;
     } else {
-      throw new BleException(BleLibraryModule.ERROR_MODULE_BUSY, "an async operation is already in progress");
+      throw new BleException(BleException.ERROR_MODULE_BUSY, "an async operation is already in progress");
     }
   }
 

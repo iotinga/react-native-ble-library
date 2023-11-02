@@ -43,7 +43,7 @@ public class PendingGattRead extends PendingGattOperation {
   public void firstRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
     boolean result = gatt.readCharacteristic(characteristic);
     if (!result) {
-      operation.fail(new BleException(BleLibraryModule.ERROR_GATT, "write error"));
+      operation.fail(new BleException(BleException.ERROR_GATT, "write error"));
     }
   }
 

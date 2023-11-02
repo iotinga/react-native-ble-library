@@ -1,4 +1,5 @@
-import type { BleDeviceInfo, BleErrorCode } from './types'
+import { BleErrorCode } from './errors'
+import type { BleDeviceInfo, BleServiceInfo, Subscription } from './types'
 
 export enum BleNativeEvent {
   INIT_DONE = 'initDone',
@@ -9,28 +10,16 @@ export enum BleNativeEvent {
   WRITE_PROGRESS = 'writeProgress',
 }
 
+export type BleServicesInfo = {
+  services: BleServiceInfo[]
+}
+
 export interface IBleNativeEventListener {
-  onInitDone(): void
   onError(data: { error: BleErrorCode; message: string }): void
   onScanResult(data: { devices: BleDeviceInfo[] }): void
   onCharValueChanged(data: { service: string; characteristic: string; value: string }): void
   onWriteProgress(data: { service: string; characteristic: string; current: number; total: number }): void
   onReadProgress(data: { service: string; characteristic: string; current: number; total: number }): void
-}
-
-export type BleCharacteristicInfo = {
-  uuid: string
-  properties: number
-}
-
-export type BleServiceInfo = {
-  uuid: string
-  isPrimary: number
-  characteristics: BleCharacteristicInfo[]
-}
-
-export type BleServicesInfo = {
-  services: BleServiceInfo[]
 }
 
 export interface IBleNativeModule {
@@ -48,5 +37,5 @@ export interface IBleNativeModule {
 }
 
 export interface INativeBleInterface extends IBleNativeModule {
-  addListener(listener: IBleNativeEventListener): () => void
+  addListener(listener: Partial<IBleNativeEventListener>): Subscription
 }

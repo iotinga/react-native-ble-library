@@ -23,19 +23,6 @@ import java.util.List;
 
 @ReactModule(name = BleLibraryModule.NAME)
 public class BleLibraryModule extends ReactContextBaseJavaModule {
-  public static final String ERROR_SCAN = "BleScanError";
-  public static final String ERROR_GENERIC = "BleGenericError";
-  public static final String ERROR_DEVICE_DISCONNECTED = "BleDeviceDisconnected";
-  public static final String ERROR_INVALID_STATE = "BleInvalidState";
-  public static final String ERROR_BLE_NOT_ENABLED = "BleNotEnabledError";
-  public static final String ERROR_BLE_NOT_SUPPORTED = "BleNotSupportedError";
-  public static final String ERROR_MISSING_PERMISSIONS = "BleMissingPermissionError";
-  public static final String ERROR_GATT = "BleGATTError";
-  public static final String ERROR_CONNECTION = "BleConnectionError";
-  public static final String ERROR_NOT_CONNECTED = "BleNotConnectedError";
-  public static final String ERROR_NOT_INITIALIZED = "BleNotInitializedError";
-  public static final String ERROR_MODULE_BUSY = "BleModuleBusyError";
-  public static final String ERROR_INVALID_ARGUMENTS = "ErrorInvalidArguments";
 
   public static final String NAME = "BleLibrary";
 
@@ -65,7 +52,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       if (!granted) {
         Log.w(NAME, "permission denied");
 
-        promise.reject(ERROR_MISSING_PERMISSIONS, "missing BLE permissions");
+        promise.reject(BleException.ERROR_MISSING_PERMISSIONS, "missing BLE permissions");
       } else {
         Log.i(NAME, "permission granted");
 
@@ -74,7 +61,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
         if (bluetoothAdapter == null) {
           Log.w(NAME, "this device doesn't have a BLE adapter");
 
-          promise.reject(ERROR_BLE_NOT_SUPPORTED, "this device doesn't support BLE");
+          promise.reject(BleException.ERROR_BLE_NOT_SUPPORTED, "this device doesn't support BLE");
         } else {
           Log.i(NAME, "checking if BLE is active");
 
@@ -83,7 +70,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
             if (!isActive) {
               Log.w(NAME, "BLE is not active");
 
-              promise.reject(ERROR_BLE_NOT_ENABLED, "BLE is not active and user denied activation");
+              promise.reject(BleException.ERROR_BLE_NOT_ENABLED, "BLE is not active and user denied activation");
             } else {
               Log.i(NAME, "BLE is active, proceed with resources initialization");
 
@@ -128,7 +115,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, String.format("scanStart(%s)", filterUuid));
 
     if (scanner == null) {
-      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      promise.reject(BleException.ERROR_NOT_INITIALIZED, "module is not initialized");
       return;
     }
 
@@ -152,7 +139,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, "scanStop()");
 
     if (scanner == null) {
-      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      promise.reject(BleException.ERROR_NOT_INITIALIZED, "module is not initialized");
       return;
     }
 
@@ -170,7 +157,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, String.format("connect(%s, %f)", id, mtu));
 
     if (gatt == null) {
-      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      promise.reject(BleException.ERROR_NOT_INITIALIZED, "module is not initialized");
       return;
     }
 
@@ -187,7 +174,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, "disconnect()");
 
     if (gatt == null) {
-      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      promise.reject(BleException.ERROR_NOT_INITIALIZED, "module is not initialized");
       return;
     }
 
@@ -204,7 +191,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, "readRSSI()");
 
     if (gatt == null) {
-      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      promise.reject(BleException.ERROR_NOT_INITIALIZED, "module is not initialized");
       return;
     }
 
@@ -221,7 +208,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, String.format("read(%s, %s, %f)", service, characteristic, size));
 
     if (gatt == null) {
-      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      promise.reject(BleException.ERROR_NOT_INITIALIZED, "module is not initialized");
       return;
     }
 
@@ -238,7 +225,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, String.format("write(%s, %s, %s, %f)", service, characteristic, value, chunkSize));
 
     if (gatt == null) {
-      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      promise.reject(BleException.ERROR_NOT_INITIALIZED, "module is not initialized");
       return;
     }
 
@@ -256,7 +243,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, String.format("subscribe(%s, %s)", service, characteristic));
 
     if (gatt == null) {
-      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      promise.reject(BleException.ERROR_NOT_INITIALIZED, "module is not initialized");
       return;
     }
 
@@ -274,7 +261,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, String.format("unsubscribe(%s, %s)", service, characteristic));
 
     if (gatt == null) {
-      promise.reject(ERROR_NOT_INITIALIZED, "module is not initialized");
+      promise.reject(BleException.ERROR_NOT_INITIALIZED, "module is not initialized");
       return;
     }
 

@@ -1,128 +1,72 @@
-import {
-  BleConnectionState,
-  BleScanState,
-  type BleCharacteristic,
-  type BleManagerState,
-  type IBleChar,
-  type IBleManager,
-  type DemoState,
-} from './types'
+import { BleError, BleErrorCode } from './errors'
+import type { BleConnectedDeviceInfo, BleDeviceInfo, DemoState, IBleManager, Subscription } from './types'
 
 export class DemoBleManager implements IBleManager {
-  private readonly callbacks = new Set<(state: BleManagerState) => void>()
-  private state: BleManagerState
+  private values = new Map<string, Buffer>()
 
-  constructor(demoState: DemoState) {
-    this.state = {
-      ready: true,
-      enabled: true,
-      permission: {
-        granted: true,
-      },
-      connection: {
-        state: BleConnectionState.Disconnected,
-        id: '',
-        rssi: -1,
-      },
-      scan: {
-        state: BleScanState.Stopped,
-        serviceUuids: [],
-        discoveredDevices: demoState.devices,
-      },
-      services: demoState.services,
+  constructor(private demoState: DemoState) {}
+
+  get device(): BleConnectedDeviceInfo {
+    return {
+      id: this.demoState.devices[0]!.id,
+      services: this.demoState.services,
     }
   }
+
+  scan(
+    serviceUuid: string[] | null | undefined,
+    callback: (devices: BleDeviceInfo[]) => void,
+    onError?: ((error: BleError) => void) | undefined
+  ): Subscription {
+    for (const device of this.demoState.devices) {
+      callback([device])
+    }
+
+    return {
+      unsubscribe: () => {},
+    }
+  }
+
+  async connect(
+    id: string,
+    mtu?: number | undefined,
+    onError?: ((error: BleError) => void) | undefined
+  ): Promise<BleConnectedDeviceInfo> {
+    return this.device
+  }
+
+  async disconnect(): Promise<void> {}
+
+  async read(
+    service: string,
+    characteristic: string,
+    size?: number | undefined,
+    progress?: ((current: number, total: number) => void) | undefined
+  ): Promise<Buffer> {
+    return this.values.get(service + characteristic) ?? Buffer.alloc(0)
+  }
+
+  async write(
+    service: string,
+    characteristic: string,
+    value: Buffer,
+    chunkSize?: number | undefined,
+    progress?: ((current: number, total: number) => void) | undefined
+  ): Promise<void> {
+    this.values.set(service + characteristic, value)
+  }
+
+  subscribe(service: string, characteristic: string, callback: (value: Buffer) => void): Subscription {
+    return {
+      unsubscribe: () => {},
+    }
+  }
+
+  dispose(): void {}
 
   async init(): Promise<void> {}
 
   async getRSSI(): Promise<number> {
     return -60
   }
-
-  private setState(state: Partial<BleManagerState>): void {
-    this.state = {
-      ...this.state,
-      ...state,
-    }
-    this.notify()
-  }
-
-  private setChar(service: string, char: string, charState: Partial<BleCharacteristic>): void {
-    this.setState({
-      services: {
-        ...this.state.services,
-        [service]: {
-          ...this.state.services[service],
-          [char]: {
-            ...this.state.services[service]?.[char]!,
-            ...charState,
-          },
-        },
-      },
-    })
-  }
-
-  async askPermissions(): Promise<boolean> {
-    return true
-  }
-
-  private notify(): void {
-    for (const callback of this.callbacks) {
-      callback(this.state)
-    }
-  }
-
-  onStateChange(callback: (state: BleManagerState) => void): () => void {
-    this.callbacks.add(callback)
-    this.notify()
-
-    return () => {
-      this.callbacks.delete(callback)
-    }
-  }
-
-  getState(): BleManagerState {
-    return this.state
-  }
-
-  async scan(serviceUuids?: string[]): Promise<void> {}
-
-  async stopScan(): Promise<void> {}
-
-  async connect(id: string, mtu?: number): Promise<void> {
-    this.setState({
-      connection: {
-        ...this.state.connection,
-        state: BleConnectionState.Connected,
-        id,
-      },
-    })
-  }
-
-  async disconnect(): Promise<void> {
-    this.setState({
-      connection: {
-        ...this.state.connection,
-        state: BleConnectionState.Disconnected,
-      },
-    })
-  }
-
-  async read(characteristics: IBleChar | IBleChar[]): Promise<void> {}
-
-  async write(characteristic: IBleChar, value: Buffer): Promise<void> {
-    this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
-      writeProgress: {
-        current: 0,
-        total: value.length,
-      },
-      value: value,
-    })
-  }
-
-  async subscribe(characteristic: IBleChar): Promise<void> {}
-
-  async unsubscribe(characteristic: IBleChar): Promise<void> {}
-
-  dispose(): void {}
 }

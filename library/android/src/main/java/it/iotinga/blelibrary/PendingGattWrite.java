@@ -41,11 +41,11 @@ public class PendingGattWrite extends PendingGattOperation {
   public void firstWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
     boolean result = characteristic.setValue(getNextChunk());
     if (!result) {
-      operation.fail(new BleException(BleLibraryModule.ERROR_GATT, "setValue failed"));
+      operation.fail(new BleException(BleException.ERROR_GATT, "setValue failed"));
     } else {
       result = gatt.writeCharacteristic(characteristic);
       if (!result) {
-        operation.fail(new BleException(BleLibraryModule.ERROR_GATT, "writeCharacteristic failed"));
+        operation.fail(new BleException(BleException.ERROR_GATT, "writeCharacteristic failed"));
       }
     }
   }

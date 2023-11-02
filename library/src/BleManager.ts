@@ -1,425 +1,412 @@
 import { PromiseSequencer } from './PromiseSequencer'
-import type { IBleNativeEventListener, INativeBleInterface } from './interface'
+import { BleError, BleErrorCode } from './errors'
+import type { INativeBleInterface } from './interface'
 import {
-  BleConnectionState,
-  BleErrorCode,
-  BleScanState,
-  type BleCharacteristic,
+  BleCharacteristicProperty,
+  type BleCharacteristicInfo,
+  type BleConnectedDeviceInfo,
   type BleDeviceInfo,
-  type BleManagerState,
-  type IBleChar,
   type IBleManager,
+  type Subscription,
+  type ILogger,
 } from './types'
 
 // as required by the standard
 const MAX_BLE_CHAR_SIZE = 512
 
-export class BleManager implements IBleManager, IBleNativeEventListener {
-  private readonly callbacks = new Set<(state: BleManagerState) => void>()
-  private readonly removeAllListeners: () => void
-  private state: BleManagerState = {
-    ready: null,
-    enabled: null,
-    permission: {
-      granted: null,
-    },
-    connection: {
-      state: BleConnectionState.Disconnected,
-      id: '',
-      rssi: -1,
-    },
-    scan: {
-      state: BleScanState.Stopped,
-      serviceUuids: [],
-      discoveredDevices: [],
-    },
-    services: {},
-  }
+export class BleManager implements IBleManager {
+  private initialized = false
+  private connectedDevice: BleConnectedDeviceInfo | null = null
   private readonly sequencer = new PromiseSequencer()
 
-  constructor(private readonly nativeInterface: INativeBleInterface) {
-    this.removeAllListeners = this.nativeInterface.addListener(this)
-    this.init()
-  }
+  private nScanActive = 0
+  private nSubscriptions = new Map<string, number>()
+  private onErrorSubscription: Subscription | null = null
 
-  private setState(state: Partial<BleManagerState>): void {
-    this.state = {
-      ...this.state,
-      ...state,
+  constructor(private readonly nativeInterface: INativeBleInterface, private readonly logger?: ILogger) {}
+
+  private ensureInitialized() {
+    if (!this.initialized) {
+      throw new BleError(BleErrorCode.BleNotInitializedError, 'BLE manager not initialized')
     }
-    this.notify()
   }
 
-  private setChar(service: string, char: string, charState: Partial<BleCharacteristic>): void {
-    this.setState({
-      services: {
-        ...this.state.services,
-        [service]: {
-          ...this.state.services[service],
-          [char]: {
-            ...this.state.services[service]?.[char]!,
-            ...charState,
-          },
-        },
-      },
-    })
+  private ensureConnected() {
+    if (!this.connectedDevice) {
+      throw new BleError(BleErrorCode.BleNotConnectedError, 'BLE device not connected')
+    }
+  }
+
+  private getChar(service: string, characteristic: string): BleCharacteristicInfo {
+    if (!this.connectedDevice) {
+      throw new BleError(BleErrorCode.BleNotConnectedError, 'BLE device not connected')
+    }
+
+    const serviceInfo = this.connectedDevice.services.find((s) => s.uuid === service)
+    if (!serviceInfo) {
+      throw new BleError(BleErrorCode.BleCharacteristicNotFoundError, `BLE service ${service} not found`)
+    }
+
+    const charInfo = serviceInfo.characteristics.find((c) => c.uuid === characteristic)
+    if (!charInfo) {
+      throw new BleError(BleErrorCode.BleCharacteristicNotFoundError, `BLE characteristic ${characteristic} not found`)
+    }
+
+    return charInfo
   }
 
   async init(): Promise<void> {
-    if (!this.state.ready) {
-      console.info('[BleManager] initializing module...')
+    if (!this.initialized) {
+      this.logger?.info('[BleManager] initializing module...')
       try {
         await this.nativeInterface.initModule()
-        console.log('[BleManager] module initialized')
-        this.setState({
-          ready: true,
-          enabled: true,
-          permission: {
-            granted: true,
-          },
-        })
+        this.logger?.info('[BleManager] module initialized')
+        this.initialized = true
       } catch (e: any) {
-        console.error('[BleManager] failed to initialize module', e)
-        if (e.code === BleErrorCode.BleNotEnabledError) {
-          console.error('[BleManager] bluetooth not enabled')
-          this.setState({
-            ready: false,
-            enabled: false,
-          })
-        } else if (e.code === BleErrorCode.MissingPermissionError) {
-          console.error('[BleManager] missing BLE permissions')
-          this.setState({
-            ready: false,
-            permission: {
-              granted: false,
-            },
-          })
-        } else {
-          console.error('[BleManager] unknown init error')
-          this.setState({
-            ready: false,
-          })
-        }
+        this.logger?.error('[BleManager] error initializing module', e)
+        throw new BleError(e.code, e.message)
       }
     }
   }
 
-  onInitDone(): void {
-    console.info('[BleManager] pong')
-    this.setState({
-      ready: true,
+  scan(
+    serviceUuids: string[] | null | undefined,
+    onDiscover: (devices: BleDeviceInfo[]) => void,
+    onError?: (error: BleError) => void
+  ): Subscription {
+    this.ensureInitialized()
+
+    const subscription = this.nativeInterface.addListener({
+      onScanResult: (data) => onDiscover(data.devices),
+      onError: (data) => {
+        this.logger?.error('[BleManager] scan error', data)
+
+        if (data.error === BleErrorCode.BleScanError && onError !== undefined) {
+          onError(new BleError(data.error, data.message))
+        }
+      },
     })
-  }
 
-  private notify(): void {
-    for (const callback of this.callbacks) {
-      callback(this.state)
-    }
-  }
+    if (this.nScanActive === 0) {
+      this.logger?.info('[BleManager] starting scan...')
 
-  onStateChange(callback: (state: BleManagerState) => void): () => void {
-    this.callbacks.add(callback)
-    this.notify()
-
-    return () => {
-      this.callbacks.delete(callback)
-    }
-  }
-
-  getState(): BleManagerState {
-    return this.state
-  }
-
-  async scan(serviceUuids?: string[]): Promise<void> {
-    console.info('[BleManager] starting scan...')
-    if (this.state.scan.state !== BleScanState.Scanning && this.state.scan.state !== BleScanState.Starting) {
-      this.setState({
-        scan: {
-          ...this.state.scan,
-          state: BleScanState.Starting,
-          serviceUuids,
-        },
-      })
-      await this.nativeInterface.scanStart(serviceUuids?.map((s) => s.toLowerCase()))
-    }
-  }
-
-  onScanResult(data: { devices: BleDeviceInfo[] }): void {
-    console.info('[BleManager] got scan result', data)
-    let devices = this.state.scan.discoveredDevices
-    for (const device of data.devices) {
-      if (devices.find((d) => d.id === device.id) === undefined) {
-        devices = [...devices, device]
-      } else if (!device.available) {
-        devices = devices.filter((d) => d.id !== device.id)
-      } else {
-        devices = devices.map((d) => (d.id === device.id ? device : d))
-      }
-    }
-    if (devices !== this.state.scan.discoveredDevices) {
-      this.setState({
-        scan: {
-          ...this.state.scan,
-          discoveredDevices: devices,
-        },
-      })
-    }
-  }
-
-  async stopScan(): Promise<void> {
-    console.info('[BleManager] stopping scan...')
-    if (this.state.scan.state !== BleScanState.Stopped && this.state.scan.state !== BleScanState.Stopping) {
-      this.setState({
-        scan: {
-          ...this.state.scan,
-          state: BleScanState.Stopping,
-        },
-      })
-      await this.nativeInterface.scanStop()
-    } else {
-      console.warn('[BleManager] scan already stopped')
-    }
-  }
-
-  connect(id: string, mtu?: number): Promise<void> {
-    console.info(`[BleManager] enqueue connect(${id}, ${mtu})`)
-    return this.sequencer.execute(async () => {
-      console.info(`[BleManager] execute connect(${id}, ${mtu})`)
-
-      if (
-        this.state.connection.state !== BleConnectionState.Connected &&
-        this.state.connection.state !== BleConnectionState.Connecting
-      ) {
-        this.setState({
-          connection: {
-            ...this.state.connection,
-            state: BleConnectionState.Connecting,
-            id,
-          },
+      this.nativeInterface
+        .scanStart(serviceUuids?.map((s) => s.toLowerCase()))
+        .then(() => {
+          this.logger?.info('[BleManager] scan started')
+          this.nScanActive += 1
         })
-        try {
-          await this.nativeInterface.connect(id, mtu ?? 0)
-          this.setState({
-            connection: {
-              ...this.state.connection,
-              state: BleConnectionState.Connected,
-            },
+        .catch((e) => {
+          this.logger?.error('[BleManager] error starting scan')
+          onError?.(new BleError(e.code, e.message))
+        })
+    }
+    this.nScanActive += 1
+
+    return {
+      unsubscribe: () => {
+        subscription.unsubscribe()
+
+        this.nScanActive -= 1
+        if (this.nScanActive === 0) {
+          this.logger?.info('[BleManager] stopping scan...')
+
+          this.nativeInterface.scanStop().catch((e) => {
+            this.logger?.error('[BleManager] error stopping scan')
+
+            onError?.(new BleError(e.code, e.message))
           })
-        } catch (e) {
-          this.setState({
-            connection: {
-              ...this.state.connection,
-              state: BleConnectionState.Disconnected,
-            },
-          })
-          throw e
         }
-      } else {
-        console.warn('[BleManager] already connected')
+      },
+    }
+  }
+
+  connect(id: string, mtu?: number, onError?: (error: BleError) => void): Promise<BleConnectedDeviceInfo> {
+    this.logger?.info(`[BleManager] enqueue connect(${id}, ${mtu})`)
+    return this.sequencer.execute(async () => {
+      this.logger?.info(`[BleManager] execute connect(${id}, ${mtu})`)
+
+      this.ensureInitialized()
+
+      if (this.connectedDevice !== null) {
+        throw new BleError(BleErrorCode.BleAlreadyConnectedError, 'BLE device already connected, call disconnect first')
+      }
+
+      if (this.onErrorSubscription) {
+        this.onErrorSubscription.unsubscribe()
+      }
+      this.onErrorSubscription = this.nativeInterface.addListener({
+        onError: (data) => {
+          if (data.error === BleErrorCode.BleDeviceDisconnectedError) {
+            this.logger?.error(`[BleManager] device disconnected`, data)
+
+            this.connectedDevice = null
+
+            if (onError !== undefined) {
+              onError(new BleError(data.error, data.message))
+            }
+          }
+        },
+      })
+
+      try {
+        const { services } = await this.nativeInterface.connect(id, mtu ?? 0)
+        this.logger?.debug(`[BleManager] connected to ${id}`, JSON.stringify(services, null, 2))
+
+        this.connectedDevice = {
+          id,
+          services,
+        }
+        this.nSubscriptions.clear()
+
+        return this.connectedDevice
+      } catch (e: any) {
+        throw new BleError(e.code, e.message)
       }
     })
   }
 
   disconnect(): Promise<void> {
-    console.info('[BleManager] enqueue disconnect()')
-    return this.sequencer.execute(async () => {
-      console.info('[BleManager] execute disconnect()')
+    this.ensureInitialized()
 
-      if (
-        this.state.connection.state !== BleConnectionState.Disconnected &&
-        this.state.connection.state !== BleConnectionState.Disconnecting
-      ) {
-        this.setState({
-          connection: {
-            ...this.state.connection,
-            state: BleConnectionState.Disconnecting,
-          },
-        })
+    this.logger?.info('[BleManager] enqueue disconnect()')
+    return this.sequencer.execute(async () => {
+      this.logger?.info('[BleManager] execute disconnect()')
+      if (this.connectedDevice) {
         try {
           await this.nativeInterface.disconnect()
-          this.setState({
-            connection: {
-              ...this.state.connection,
-              state: BleConnectionState.Disconnected,
-            },
-          })
-        } catch (e) {
-          this.setState({
-            connection: {
-              ...this.state.connection,
-              state: BleConnectionState.Unknown,
-            },
-          })
-          throw e
+        } catch (e: any) {
+          throw new BleError(e.code, e.message)
+        } finally {
+          this.onErrorSubscription?.unsubscribe()
+          this.connectedDevice = null
+          this.nSubscriptions.clear()
         }
-      } else {
-        console.warn('[BleManager] already disconnected')
       }
     })
   }
 
-  read(characteristic: IBleChar): Promise<void> {
-    console.info(`[BleManager] enqueue read(${characteristic})`)
+  read(
+    service: string,
+    characteristic: string,
+    size?: number,
+    progress?: (current: number, total: number) => void
+  ): Promise<Buffer> {
+    service = service.toLowerCase()
+    characteristic = characteristic.toLowerCase()
+
+    this.logger?.info(`[BleManager] enqueue read(${characteristic})`)
     return this.sequencer.execute(async () => {
-      console.info(`[BleManager] execute read(${characteristic})`)
-      if (this.state.connection.state === BleConnectionState.Connected) {
-        const result = await this.nativeInterface.read(
-          characteristic.getServiceUuid(),
-          characteristic.getCharUuid(),
-          characteristic.getSize() ?? 0
-        )
-        this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
-          value: Buffer.from(result, 'base64'),
+      this.ensureInitialized()
+      this.ensureConnected()
+
+      const char = this.getChar(service, characteristic)
+      if (!(char.properties & BleCharacteristicProperty.READ)) {
+        throw new BleError(BleErrorCode.BleOperationNotAllowed, `characteristic ${characteristic} does not allow READ`)
+      }
+
+      this.logger?.info(`[BleManager] execute read(${characteristic})`)
+
+      let subscription: Subscription | undefined
+      if (progress !== undefined) {
+        subscription = this.nativeInterface.addListener({
+          onReadProgress: (data) => {
+            if (data.characteristic === characteristic && data.service === service) {
+              this.logger?.info('[BleManager] read progress', data)
+
+              progress(data.current, data.total)
+            }
+          },
         })
       }
+
+      let result: string
+      try {
+        result = await this.nativeInterface.read(service, characteristic, size ?? 0)
+      } catch (e: any) {
+        throw new BleError(e.code, e.message)
+      }
+
+      subscription?.unsubscribe()
+
+      return Buffer.from(result, 'base64')
     })
   }
 
-  onReadProgress(data: { service: string; characteristic: string; current: number; total: number }): void {
-    console.info('[BleManager] read progress', data)
-    this.setChar(data.service, data.characteristic, {
-      readProgress: {
-        current: data.current,
-        total: data.total,
-      },
-    })
-  }
+  write(
+    service: string,
+    characteristic: string,
+    value: Buffer,
+    chunkSize = MAX_BLE_CHAR_SIZE,
+    progress?: (current: number, total: number) => void
+  ): Promise<void> {
+    service = service.toLowerCase()
+    characteristic = characteristic.toLowerCase()
 
-  write(characteristic: IBleChar, value: Buffer): Promise<void> {
-    console.info(
+    this.logger?.info(
       `[BleManager] enqueue write(${characteristic}, ${value.subarray(0, 50).toString('base64')} (len: ${
         value.length
       }))`
     )
     return this.sequencer.execute(async () => {
-      console.info(
+      this.ensureInitialized()
+      this.ensureConnected()
+
+      const char = this.getChar(service, characteristic)
+      if (!(char.properties & BleCharacteristicProperty.WRITE)) {
+        throw new BleError(BleErrorCode.BleOperationNotAllowed, `characteristic ${characteristic} does not allow WRITE`)
+      }
+
+      this.logger?.info(
         `[BleManager] execute write(${characteristic}, ${value.subarray(0, 50).toString('base64')} (len: ${
           value.length
         })`
       )
-      if (this.state.connection.state === BleConnectionState.Connected) {
-        this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
-          writeProgress: {
-            current: 0,
-            total: value.length,
-          },
-          value: value,
-        })
 
-        await this.nativeInterface.write(
-          characteristic.getServiceUuid(),
-          characteristic.getCharUuid(),
-          value.toString('base64'),
-          characteristic.getChunkSize() ?? MAX_BLE_CHAR_SIZE
-        )
+      let subscription: Subscription | undefined
+      if (progress !== undefined) {
+        subscription = this.nativeInterface.addListener({
+          onWriteProgress: (data) => {
+            if (data.characteristic === characteristic && data.service === service) {
+              this.logger?.info('[BleManager] write progress', data)
+
+              progress(data.current, data.total)
+            }
+          },
+        })
       }
+
+      try {
+        await this.nativeInterface.write(service, characteristic, value.toString('base64'), chunkSize)
+      } catch (e: any) {
+        throw new BleError(e.code, e.message)
+      }
+
+      subscription?.unsubscribe()
     })
   }
 
-  onWriteProgress(data: { service: string; characteristic: string; current: number; total: number }): void {
-    console.info('[BleManager] write progress', data)
-    this.setChar(data.service, data.characteristic, {
-      writeProgress: {
-        current: data.current,
-        total: data.total,
+  subscribe(
+    service: string,
+    characteristic: string,
+    callback: (value: Buffer) => void,
+    onError?: (error: BleError) => void
+  ): Subscription {
+    service = service.toLowerCase()
+    characteristic = characteristic.toLowerCase()
+
+    this.ensureInitialized()
+    this.ensureConnected()
+
+    const char = this.getChar(service, characteristic)
+    if (
+      !(char.properties & BleCharacteristicProperty.NOTIFY) &&
+      !(char.properties & BleCharacteristicProperty.INDICATE)
+    ) {
+      throw new BleError(
+        BleErrorCode.BleOperationNotAllowed,
+        `characteristic ${characteristic} does not allow subscriptions`
+      )
+    }
+
+    const subscription = this.nativeInterface.addListener({
+      onCharValueChanged: (data) => {
+        if (data.characteristic === characteristic && data.service === service) {
+          this.logger?.info('[BleManager] char value changed', data)
+
+          callback(Buffer.from(data.value, 'base64'))
+        }
       },
     })
-  }
 
-  subscribe(characteristic: IBleChar, callback?: (value: Buffer) => boolean): Promise<void> {
-    console.info(`[BleManager] enqueue subscribe(${characteristic})`)
-    return this.sequencer.execute(async () => {
-      console.info(`[BleManager] execute subscribe(${characteristic})`)
-      if (this.state.connection.state === BleConnectionState.Connected) {
-        await this.nativeInterface.subscribe(characteristic.getServiceUuid(), characteristic.getCharUuid())
-        this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
-          subscribed: true,
-          callback,
+    const key = `${service}:${characteristic}`
+    const nSubscriptions = this.nSubscriptions.get(key) ?? 0
+    if (nSubscriptions === 0) {
+      this.logger?.info(`[BleManager] enqueue subscribe(${characteristic})`)
+      this.sequencer
+        .execute(async () => {
+          this.logger?.info(`[BleManager] execute subscribe(${characteristic})`)
+
+          this.ensureInitialized()
+          this.ensureConnected()
+
+          this.nativeInterface.subscribe(service, characteristic)
         })
-      }
-    })
-  }
-
-  unsubscribe(characteristic: IBleChar): Promise<void> {
-    console.info(`[BleManager] enqueue unsubscribe(${characteristic})`)
-    return this.sequencer.execute(async () => {
-      console.info(`[BleManager] execute unsubscribe(${characteristic})`)
-      if (this.state.connection.state === BleConnectionState.Connected) {
-        await this.nativeInterface.unsubscribe(characteristic.getServiceUuid(), characteristic.getCharUuid())
-        this.setChar(characteristic.getServiceUuid(), characteristic.getCharUuid(), {
-          subscribed: false,
+        .then(() => {
+          this.logger?.info('[BleManager] subscribed to ', characteristic)
+          this.nSubscriptions.set(key, nSubscriptions + 1)
         })
-      }
-    })
-  }
+        .catch((e) => {
+          this.logger?.error('[BleManager] error subscribing to ', characteristic)
 
-  onCharValueChanged(data: { service: string; characteristic: string; value: string }): void {
-    const callback = this.state.services[data.service]?.[data.characteristic]?.callback
-    const value = Buffer.from(data.value, 'base64')
-    if (callback === undefined || callback(value)) {
-      console.info(
-        `[BleManager] char value changed: ${value.subarray(0, 50).toString('base64')} (len: ${value.length})`
-      )
-      this.setChar(data.service, data.characteristic, {
-        value,
-      })
+          if (onError !== undefined) {
+            onError(new BleError(e.code, e.message))
+          }
+        })
     }
-  }
 
-  onError(data: { error: BleErrorCode; message: string }): void {
-    console.info('[BleManager] error from native code', data)
-    switch (data.error) {
-      case BleErrorCode.BleScanError:
-        this.setState({
-          scan: {
-            ...this.state.scan,
-            state: BleScanState.Stopped,
-          },
-          error: {
-            code: data.error,
-            message: data.message,
-          },
-        })
-        break
-      case BleErrorCode.DeviceDisconnected:
-        this.setState({
-          connection: {
-            ...this.state.connection,
-            state: BleConnectionState.Disconnected,
-          },
-          error: {
-            code: data.error,
-            message: data.message,
-          },
-        })
-        break
-      case BleErrorCode.GenericError:
-        this.setState({
-          error: {
-            code: data.error,
-            message: data.message,
-          },
-        })
-        break
+    return {
+      unsubscribe: () => {
+        subscription.unsubscribe()
+
+        const nSubscriptions = this.nSubscriptions.get(key) ?? 0
+        if (nSubscriptions === 1) {
+          this.logger?.info(`[BleManager] enqueue unsubscribe(${characteristic})`)
+          this.sequencer
+            .execute(async () => {
+              this.logger?.info(`[BleManager] execute unsubscribe(${characteristic})`)
+
+              this.ensureInitialized()
+              this.ensureConnected()
+
+              this.nativeInterface.unsubscribe(service, characteristic)
+            })
+            .then(() => {
+              this.logger?.info('[BleManager] unsubscribed from ', characteristic)
+              this.nSubscriptions.set(key, 0)
+            })
+            .catch((e) => {
+              this.logger?.error('[BleManager] error unsubscribing from ', characteristic)
+
+              if (onError !== undefined) {
+                onError(new BleError(e.code, e.message))
+              }
+            })
+        } else {
+          this.nSubscriptions.set(key, nSubscriptions - 1)
+        }
+      },
     }
   }
 
   getRSSI(): Promise<number> {
-    console.info(`[BleManager] enqueue readRSSI()`)
+    this.logger?.info(`[BleManager] enqueue readRSSI()`)
     return this.sequencer.execute(async () => {
-      console.info(`[BleManager] execute readRSSI()`)
+      this.logger?.info(`[BleManager] execute readRSSI()`)
 
-      if (this.state.connection.state !== BleConnectionState.Connected) {
-        throw new Error('not connected')
+      this.ensureInitialized()
+      this.ensureConnected()
+
+      try {
+        return this.nativeInterface.readRSSI()
+      } catch (e: any) {
+        throw new BleError(e.code, e.message)
       }
-
-      return this.nativeInterface.readRSSI()
     })
   }
 
   dispose(): void {
-    console.info('[BleManager] terminating manager')
-    this.removeAllListeners()
-    this.nativeInterface.disposeModule()
+    if (this.initialized) {
+      this.logger?.info('[BleManager] terminating manager')
+      this.nativeInterface.disposeModule()
+      this.initialized = false
+      this.connectedDevice = null
+      this.nSubscriptions.clear()
+      this.onErrorSubscription?.unsubscribe()
+    }
+  }
+
+  get device() {
+    return this.connectedDevice
   }
 }

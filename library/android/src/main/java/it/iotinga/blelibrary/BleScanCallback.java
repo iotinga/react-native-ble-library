@@ -55,7 +55,7 @@ public class BleScanCallback extends ScanCallback {
   @Override
   public void onScanFailed(int errorCode) {
     Log.e(TAG, "SCAN FAILED, error = " + errorCode);
-    eventEmitter.emitError(BleLibraryModule.ERROR_SCAN, "scan error, native error code " + errorCode);
+    eventEmitter.emitError(BleException.ERROR_SCAN, "scan error, native error code " + errorCode);
   }
 
   @Override

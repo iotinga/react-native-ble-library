@@ -1,4 +1,19 @@
 {
-  "name": "BleLibraryExample",
-  "displayName": "BleLibraryExample"
+  "expo": {
+    "name": "BleLibraryDemo",
+    "slug": "iotinga-react-native-ble-library-demo",
+    "version": "1.0.0",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to YAT devices"
+      },
+      "bundleIdentifier": "it.iotinga.blelibrarydemo"
+    },
+    "android": {
+      "package": "it.iotinga.blelibrarydemo"
+    }
+  }
 }
