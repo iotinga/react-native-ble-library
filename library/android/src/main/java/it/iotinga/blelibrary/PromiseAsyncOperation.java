@@ -36,7 +36,7 @@ public class PromiseAsyncOperation implements AsyncOperation {
         BleException bleException = (BleException) exception;
         promise.reject(bleException.getCode(), exception.getMessage(), bleException.getDetails());
       } else {
-        promise.reject(BleException.DEFAULT_ERROR_CODE, exception.getMessage());
+        promise.reject(BleException.ERROR_GENERIC, exception.getMessage(), exception);
       }
     }
   }

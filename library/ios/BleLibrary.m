@@ -155,7 +155,7 @@ RCT_EXPORT_METHOD(cancelPendingOperations:(RCTPromiseResolveBlock)resolve
 {
     NSLog(@"[BleLibrary] cancelPendingOperations()");
 
-    [self reject:ErrorOperationCanceled message:@"the current operation was canceles" error:nil];
+    [self reject:ErrorOperationCanceled message:@"the current operation was canceled" error:nil];
     
     self.write = nil;
     self.read = nil;
