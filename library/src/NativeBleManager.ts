@@ -1,7 +1,7 @@
 import { NativeEventEmitter, NativeModules } from 'react-native'
+import { BleError, BleErrorCode } from './BleError'
 import { NativeBleInterface, type INativeBleInterface } from './NativeBleInterface'
 import { PromiseSequencer } from './PromiseSequencer'
-import { BleError, BleErrorCode } from './BleError'
 import {
   BleCharacteristicProperty,
   type BleCharacteristicInfo,
@@ -21,7 +21,7 @@ export class NativeBleManager implements BleManager {
   private connectedDevice: BleConnectedDeviceInfo | null = null
   private readonly sequencer = new PromiseSequencer()
 
-  private nScanActive = 0
+  private isScanActive = false
   private nSubscriptions = new Map<string, number>()
   private onErrorSubscription: Subscription | null = null
 
@@ -96,35 +96,45 @@ export class NativeBleManager implements BleManager {
       },
     })
 
-    this.nScanActive += 1
-    if (this.nScanActive === 1) {
-      this.logger?.info('[BleManager] starting scan...')
+    const startScan = async () => {
+      if (this.isScanActive) {
+        this.isScanActive = true
 
-      this.nativeInterface!.scanStart(serviceUuids?.map((s) => s.toLowerCase()))
-        .then(() => {
-          this.logger?.info('[BleManager] scan started')
+        this.logger?.warn('[BleManager] scan already active, stopping previous one...')
+        await this.nativeInterface!.scanStop().catch((error) => {
+          this.logger?.error('[BleManager] error stopping scan', error)
         })
-        .catch((e) => {
-          this.logger?.error('[BleManager] error starting scan')
-          this.nScanActive -= 1
-          onError?.(new BleError(e.code, e.message))
-        })
+      }
+
+      await this.nativeInterface!.scanStart(serviceUuids?.map((s) => s.toLowerCase()))
     }
+
+    startScan()
+      .then(() => {
+        this.logger?.info('[BleManager] scan started')
+      })
+      .catch((e) => {
+        this.logger?.error('[BleManager] error starting scan')
+        onError?.(new BleError(e.code, e.message))
+        this.isScanActive = false
+      })
 
     return {
       unsubscribe: () => {
         subscription.unsubscribe()
 
-        this.nScanActive -= 1
-        if (this.nScanActive <= 0) {
-          this.logger?.info('[BleManager] stopping scan...')
+        this.logger?.info('[BleManager] stopping scan...')
 
-          this.nativeInterface!.scanStop().catch((e) => {
+        this.isScanActive = false
+        this.nativeInterface!.scanStop()
+          .catch((e) => {
             this.logger?.error('[BleManager] error stopping scan')
 
             onError?.(new BleError(e.code, e.message))
           })
-        }
+          .then(() => {
+            this.logger?.info('[BleManager] scan stopped')
+          })
       },
     }
   }
