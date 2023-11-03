@@ -150,6 +150,7 @@ public class BleGattImpl implements BleGatt {
   public void cancelPendingOperations() throws BleException {
     PendingGattOperation operation = context.getPendingGattOperation();
     if (operation != null) {
+      context.setPendingGattOperation(null);
       operation.onCancel(gatt);
     }
   }
