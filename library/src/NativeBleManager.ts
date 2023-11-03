@@ -338,7 +338,7 @@ export class NativeBleManager implements BleManager {
           this.ensureInitialized()
           this.ensureConnected()
 
-          this.nativeInterface!.subscribe(service, characteristic)
+          await this.nativeInterface!.subscribe(service, characteristic)
         })
         .then(() => {
           this.logger?.info('[BleManager] subscribed to ', characteristic)
@@ -367,7 +367,7 @@ export class NativeBleManager implements BleManager {
               this.ensureInitialized()
               this.ensureConnected()
 
-              this.nativeInterface!.unsubscribe(service, characteristic)
+              await this.nativeInterface!.unsubscribe(service, characteristic)
             })
             .then(() => {
               this.logger?.info('[BleManager] unsubscribed from ', characteristic)
