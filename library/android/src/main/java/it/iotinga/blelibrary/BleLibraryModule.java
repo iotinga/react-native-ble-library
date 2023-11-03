@@ -114,9 +114,13 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   public void cancelPendingOperations(Promise promise) {
     Log.d(NAME, "cancelPendingOperations()");
 
+    try {
+      gatt.cancelPendingOperations();
 
-
-    promise.resolve(null);
+      promise.resolve(null);
+    } catch (BleException e) {
+      promise.reject(e.getCode(), e.getMessage(), e);
+    }
   }
 
   @ReactMethod
