@@ -96,7 +96,8 @@ export class NativeBleManager implements BleManager {
       },
     })
 
-    if (this.nScanActive === 0) {
+    this.nScanActive += 1
+    if (this.nScanActive === 1) {
       this.logger?.info('[BleManager] starting scan...')
 
       this.nativeInterface!.scanStart(serviceUuids?.map((s) => s.toLowerCase()))
@@ -106,17 +107,17 @@ export class NativeBleManager implements BleManager {
         })
         .catch((e) => {
           this.logger?.error('[BleManager] error starting scan')
+          this.nScanActive -= 1
           onError?.(new BleError(e.code, e.message))
         })
     }
-    this.nScanActive += 1
 
     return {
       unsubscribe: () => {
         subscription.unsubscribe()
 
         this.nScanActive -= 1
-        if (this.nScanActive === 0) {
+        if (this.nScanActive <= 0) {
           this.logger?.info('[BleManager] stopping scan...')
 
           this.nativeInterface!.scanStop().catch((e) => {
