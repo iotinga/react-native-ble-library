@@ -103,7 +103,6 @@ export class NativeBleManager implements BleManager {
       this.nativeInterface!.scanStart(serviceUuids?.map((s) => s.toLowerCase()))
         .then(() => {
           this.logger?.info('[BleManager] scan started')
-          this.nScanActive += 1
         })
         .catch((e) => {
           this.logger?.error('[BleManager] error starting scan')
