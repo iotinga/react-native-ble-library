@@ -1,4 +1,4 @@
-import type { BleError } from './errors'
+import type { BleError } from './BleError'
 
 export type BleDeviceInfo = {
   /** ID of the device. On Android this is a MAC address, on iOS it's an opaque UUID */
@@ -54,7 +54,7 @@ export type BleConnectedDeviceInfo = {
   services: BleServiceInfo[]
 }
 
-export interface IBleManager {
+export interface BleManager {
   /**
    * Needs to be called to initialize the BLE manager.
    * This does trigger the permission request on iOS/Android.
@@ -197,13 +197,4 @@ export interface ILogger {
   info(message: string, ...args: unknown[]): void
   warn(message: string, ...args: unknown[]): void
   error(message: string, ...args: unknown[]): void
-}
-
-export interface IBleManagerFactory {
-  /**
-   * Creates a new instance of the BLE manager.
-   *
-   * @param logger optional logger to use for the new instance
-   */
-  create(logger?: ILogger): IBleManager
 }

@@ -1,7 +1,7 @@
-import { BleError, BleErrorCode } from './errors'
-import type { BleConnectedDeviceInfo, BleDeviceInfo, DemoState, IBleManager, Subscription } from './types'
+import { BleError, BleErrorCode } from './BleError'
+import type { BleConnectedDeviceInfo, BleDeviceInfo, DemoState, BleManager, Subscription } from './types'
 
-export class DemoBleManager implements IBleManager {
+export class DemoBleManager implements BleManager {
   private values = new Map<string, Buffer>()
 
   constructor(private demoState: DemoState) {}

@@ -1,9 +1,9 @@
 export enum BleErrorCode {
   BleGenericError = 'BleGenericError',
   BleNotInitializedError = 'BleNotInitializedError',
-  BleBleNotSupportedError = 'BleNotSupportedError',
+  BleNotSupportedError = 'BleNotSupportedError',
   BleMissingPermissionError = 'BleMissingPermissionError',
-  BleBleNotEnabledError = 'BleNotEnabledError',
+  BleNotEnabledError = 'BleNotEnabledError',
   BleDeviceDisconnectedError = 'BleDeviceDisconnected',
   BleInvalidStateError = 'BleInvalidState',
   BleGATTError = 'BleGATTError',

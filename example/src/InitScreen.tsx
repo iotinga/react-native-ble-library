@@ -1,10 +1,11 @@
-import { BluetoothNotEnabledError, InsufficientPermissionError, useBleManager } from '@iotinga/react-native-ble-library'
+import { BleError, BleErrorCode } from '@iotinga/react-native-ble-library'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useCallback } from 'react'
 import { Alert, Linking, Text } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RootStackParamList } from './Navigation'
+import { useBleManager } from './hooks/useBleManager'
 
 export function InitScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>()
@@ -18,7 +19,7 @@ export function InitScreen() {
           navigation.replace('Scan')
         })
         .catch(e => {
-          if (e instanceof BluetoothNotEnabledError) {
+          if (e instanceof BleError && e.code === BleErrorCode.BleNotEnabledError) {
             Alert.alert('Error', 'Bluetooth is not enabled. Open the settings to enable it', [
               {
                 text: 'Cancel',
@@ -31,7 +32,7 @@ export function InitScreen() {
                 style: 'default',
               },
             ])
-          } else if (e instanceof InsufficientPermissionError) {
+          } else if (e instanceof BleError && e.code === BleErrorCode.BleMissingPermissionError) {
             Alert.alert('Error', 'Permissions are not granted. You should open the settings and enable them', [
               {
                 text: 'Cancel',

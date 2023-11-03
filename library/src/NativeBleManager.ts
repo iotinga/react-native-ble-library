@@ -1,20 +1,22 @@
+import { NativeEventEmitter, NativeModules } from 'react-native'
+import { NativeBleInterface, type INativeBleInterface } from './NativeBleInterface'
 import { PromiseSequencer } from './PromiseSequencer'
-import { BleError, BleErrorCode } from './errors'
-import type { INativeBleInterface } from './interface'
+import { BleError, BleErrorCode } from './BleError'
 import {
   BleCharacteristicProperty,
   type BleCharacteristicInfo,
   type BleConnectedDeviceInfo,
   type BleDeviceInfo,
-  type IBleManager,
-  type Subscription,
+  type BleManager,
   type ILogger,
+  type Subscription,
 } from './types'
 
 // as required by the standard
 const MAX_BLE_CHAR_SIZE = 512
 
-export class BleManager implements IBleManager {
+export class NativeBleManager implements BleManager {
+  private nativeInterface: INativeBleInterface | null = null
   private initialized = false
   private connectedDevice: BleConnectedDeviceInfo | null = null
   private readonly sequencer = new PromiseSequencer()
@@ -23,7 +25,7 @@ export class BleManager implements IBleManager {
   private nSubscriptions = new Map<string, number>()
   private onErrorSubscription: Subscription | null = null
 
-  constructor(private readonly nativeInterface: INativeBleInterface, private readonly logger?: ILogger) {}
+  constructor(private readonly logger?: ILogger) {}
 
   private ensureInitialized() {
     if (!this.initialized) {
@@ -57,6 +59,13 @@ export class BleManager implements IBleManager {
 
   async init(): Promise<void> {
     if (!this.initialized) {
+      const nativeModule = NativeModules.BleLibrary
+      if (nativeModule === undefined) {
+        throw new Error(`Ble native module not found. Ensure to link the library correctly!`)
+      }
+      const nativeEventEmitter = new NativeEventEmitter(nativeModule)
+      this.nativeInterface = new NativeBleInterface(nativeModule, nativeEventEmitter, this.logger)
+
       this.logger?.info('[BleManager] initializing module...')
       try {
         await this.nativeInterface.initModule()
@@ -76,7 +85,7 @@ export class BleManager implements IBleManager {
   ): Subscription {
     this.ensureInitialized()
 
-    const subscription = this.nativeInterface.addListener({
+    const subscription = this.nativeInterface!.addListener({
       onScanResult: (data) => onDiscover(data.devices),
       onError: (data) => {
         this.logger?.error('[BleManager] scan error', data)
@@ -90,8 +99,7 @@ export class BleManager implements IBleManager {
     if (this.nScanActive === 0) {
       this.logger?.info('[BleManager] starting scan...')
 
-      this.nativeInterface
-        .scanStart(serviceUuids?.map((s) => s.toLowerCase()))
+      this.nativeInterface!.scanStart(serviceUuids?.map((s) => s.toLowerCase()))
         .then(() => {
           this.logger?.info('[BleManager] scan started')
           this.nScanActive += 1
@@ -111,7 +119,7 @@ export class BleManager implements IBleManager {
         if (this.nScanActive === 0) {
           this.logger?.info('[BleManager] stopping scan...')
 
-          this.nativeInterface.scanStop().catch((e) => {
+          this.nativeInterface!.scanStop().catch((e) => {
             this.logger?.error('[BleManager] error stopping scan')
 
             onError?.(new BleError(e.code, e.message))
@@ -135,7 +143,7 @@ export class BleManager implements IBleManager {
       if (this.onErrorSubscription) {
         this.onErrorSubscription.unsubscribe()
       }
-      this.onErrorSubscription = this.nativeInterface.addListener({
+      this.onErrorSubscription = this.nativeInterface!.addListener({
         onError: (data) => {
           if (data.error === BleErrorCode.BleDeviceDisconnectedError) {
             this.logger?.error(`[BleManager] device disconnected`, data)
@@ -150,7 +158,7 @@ export class BleManager implements IBleManager {
       })
 
       try {
-        const { services } = await this.nativeInterface.connect(id, mtu ?? 0)
+        const { services } = await this.nativeInterface!.connect(id, mtu ?? 0)
         this.logger?.debug(`[BleManager] connected to ${id}`, JSON.stringify(services, null, 2))
 
         this.connectedDevice = {
@@ -174,7 +182,7 @@ export class BleManager implements IBleManager {
       this.logger?.info('[BleManager] execute disconnect()')
       if (this.connectedDevice) {
         try {
-          await this.nativeInterface.disconnect()
+          await this.nativeInterface!.disconnect()
         } catch (e: any) {
           throw new BleError(e.code, e.message)
         } finally {
@@ -209,7 +217,7 @@ export class BleManager implements IBleManager {
 
       let subscription: Subscription | undefined
       if (progress !== undefined) {
-        subscription = this.nativeInterface.addListener({
+        subscription = this.nativeInterface!.addListener({
           onReadProgress: (data) => {
             if (data.characteristic === characteristic && data.service === service) {
               this.logger?.info('[BleManager] read progress', data)
@@ -222,7 +230,7 @@ export class BleManager implements IBleManager {
 
       let result: string
       try {
-        result = await this.nativeInterface.read(service, characteristic, size ?? 0)
+        result = await this.nativeInterface!.read(service, characteristic, size ?? 0)
       } catch (e: any) {
         throw new BleError(e.code, e.message)
       }
@@ -265,7 +273,7 @@ export class BleManager implements IBleManager {
 
       let subscription: Subscription | undefined
       if (progress !== undefined) {
-        subscription = this.nativeInterface.addListener({
+        subscription = this.nativeInterface!.addListener({
           onWriteProgress: (data) => {
             if (data.characteristic === characteristic && data.service === service) {
               this.logger?.info('[BleManager] write progress', data)
@@ -277,7 +285,7 @@ export class BleManager implements IBleManager {
       }
 
       try {
-        await this.nativeInterface.write(service, characteristic, value.toString('base64'), chunkSize)
+        await this.nativeInterface!.write(service, characteristic, value.toString('base64'), chunkSize)
       } catch (e: any) {
         throw new BleError(e.code, e.message)
       }
@@ -309,7 +317,7 @@ export class BleManager implements IBleManager {
       )
     }
 
-    const subscription = this.nativeInterface.addListener({
+    const subscription = this.nativeInterface!.addListener({
       onCharValueChanged: (data) => {
         if (data.characteristic === characteristic && data.service === service) {
           this.logger?.info('[BleManager] char value changed', data)
@@ -330,7 +338,7 @@ export class BleManager implements IBleManager {
           this.ensureInitialized()
           this.ensureConnected()
 
-          this.nativeInterface.subscribe(service, characteristic)
+          this.nativeInterface!.subscribe(service, characteristic)
         })
         .then(() => {
           this.logger?.info('[BleManager] subscribed to ', characteristic)
@@ -359,7 +367,7 @@ export class BleManager implements IBleManager {
               this.ensureInitialized()
               this.ensureConnected()
 
-              this.nativeInterface.unsubscribe(service, characteristic)
+              this.nativeInterface!.unsubscribe(service, characteristic)
             })
             .then(() => {
               this.logger?.info('[BleManager] unsubscribed from ', characteristic)
@@ -388,7 +396,7 @@ export class BleManager implements IBleManager {
       this.ensureConnected()
 
       try {
-        return this.nativeInterface.readRSSI()
+        return this.nativeInterface!.readRSSI()
       } catch (e: any) {
         throw new BleError(e.code, e.message)
       }
@@ -398,7 +406,8 @@ export class BleManager implements IBleManager {
   dispose(): void {
     if (this.initialized) {
       this.logger?.info('[BleManager] terminating manager')
-      this.nativeInterface.disposeModule()
+      this.nativeInterface!.disposeModule()
+      this.nativeInterface = null
       this.initialized = false
       this.connectedDevice = null
       this.nSubscriptions.clear()

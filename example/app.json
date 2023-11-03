@@ -8,7 +8,7 @@
     ],
     "ios": {
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to YAT devices"
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to scan and connect to BLE devices"
       },
       "bundleIdentifier": "it.iotinga.blelibrarydemo"
     },

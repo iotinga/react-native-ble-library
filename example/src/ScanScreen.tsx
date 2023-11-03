@@ -1,10 +1,10 @@
-import { useBleScan } from '@iotinga/react-native-ble-library'
-import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Text, TouchableOpacity, View } from 'react-native'
+import { FlatList } from 'react-native-gesture-handler'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RootStackParamList } from './Navigation'
-import { FlatList } from 'react-native-gesture-handler'
+import { useBleScan } from './hooks/useBleScan'
 
 export function ScanScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>()
@@ -12,7 +12,9 @@ export function ScanScreen() {
 
   return (
     <SafeAreaView edges={['bottom']}>
-      <Text style={{ margin: 15, fontSize: 18, textAlign: 'center' }}>{devices.length === 0 ? 'Scanning for BLE devices...' : `Found ${devices.length} devices`}</Text>
+      <Text style={{ margin: 15, fontSize: 18, textAlign: 'center' }}>
+        {devices.length === 0 ? 'Scanning for BLE devices...' : `Found ${devices.length} devices`}
+      </Text>
       {error && (
         <Text style={{ marginBottom: 15, fontSize: 18, color: 'red', textAlign: 'center' }}>
           BLE scan error: {error.message}
@@ -21,7 +23,7 @@ export function ScanScreen() {
       <FlatList
         style={{ height: '100%', paddingHorizontal: 15 }}
         data={devices}
-        renderItem={({ item, index }) => (
+        renderItem={({ item }) => (
           <>
             <View style={{ borderBottomColor: 'black', borderBottomWidth: 1 }} />
             <TouchableOpacity

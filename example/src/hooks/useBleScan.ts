@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import type { BleDeviceInfo } from '../types'
+import type { BleDeviceInfo } from '@iotinga/react-native-ble-library'
 import { useBleManager } from './useBleManager'
-import type { BleError } from '../errors'
+import { BleError } from '@iotinga/react-native-ble-library'
 
 export function useBleScan(serviceUuids?: string[]): [BleDeviceInfo[], BleError | null] {
   const [devices, setDevices] = useState<BleDeviceInfo[]>([])

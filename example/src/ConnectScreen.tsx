@@ -1,10 +1,11 @@
-import { BleError, useBleManager } from '@iotinga/react-native-ble-library'
+import { BleError } from '@iotinga/react-native-ble-library'
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useEffect } from 'react'
 import { Alert, Text } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RootStackParamList } from './Navigation'
+import { useBleManager } from './hooks/useBleManager'
 
 export function ConnectScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>()
