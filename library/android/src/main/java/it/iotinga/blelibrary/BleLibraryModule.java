@@ -111,6 +111,15 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void cancelPendingOperations(Promise promise) {
+    Log.d(NAME, "cancelPendingOperations()");
+
+
+
+    promise.resolve(null);
+  }
+
+  @ReactMethod
   public void scanStart(ReadableArray filterUuid, Promise promise) {
     Log.d(NAME, String.format("scanStart(%s)", filterUuid));
 

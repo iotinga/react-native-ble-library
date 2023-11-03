@@ -8,6 +8,7 @@ public interface BleGatt {
   void subscribe(String service, String characteristic) throws BleException;
   void unsubscribe(String service, String characteristic) throws BleException;
   void readRSSI(AsyncOperation operation) throws BleException;
+  void cancelPendingOperations() throws BleException;
   void dispose();
 }
 

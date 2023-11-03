@@ -4,23 +4,24 @@ export enum BleErrorCode {
   BleNotSupportedError = 'BleNotSupportedError',
   BleMissingPermissionError = 'BleMissingPermissionError',
   BleNotEnabledError = 'BleNotEnabledError',
-  BleDeviceDisconnectedError = 'BleDeviceDisconnected',
-  BleInvalidStateError = 'BleInvalidState',
+  BleDeviceDisconnectedError = 'BleDeviceDisconnectedError',
+  BleInvalidStateError = 'BleInvalidStateError',
   BleGATTError = 'BleGATTError',
   BleConnectionError = 'BleConnectionError',
   BleNotConnectedError = 'BleNotConnectedError',
   BleModuleBusyError = 'BleModuleBusyError',
-  BleInvalidArgumentsError = 'ErrorInvalidArguments',
+  BleInvalidArgumentsError = 'BleInvalidArgumentsError',
   BleCharacteristicNotFoundError = 'BleCharacteristicNotFoundError',
   BleServiceNotFoundError = 'BleServiceNotFoundError',
   BleScanError = 'BleScanError',
   BleAlreadyConnectedError = 'BleAlreadyConnectedError',
   BleDeviceNotFoundError = 'BleDeviceNotFoundError',
-  BleOperationNotAllowed = 'BleOperationNotAllowed',
+  BleOperationNotAllowed = 'BleOperationNotAllowedError',
+  BleOperationCanceled = 'BleOperationCanceledError',
 }
 
 export class BleError extends Error {
-  constructor(public readonly code: string, message = code) {
+  constructor(public readonly code: BleErrorCode, message: string = code) {
     super(message)
     this.name = 'BleError'
   }

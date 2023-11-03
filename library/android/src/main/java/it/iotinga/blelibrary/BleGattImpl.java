@@ -39,12 +39,12 @@ public class BleGattImpl implements BleGatt {
         context.setPendingGattOperation(new PendingGattConnect(emitter, operation, mtu, context));
         gatt = device.connectGatt(appContext, false,  callback);
         if (gatt == null) {
-          throw new BleException(BleLibraryModule.ERROR_GATT, "gatt instance is null");
+          throw new BleException(BleException.ERROR_GATT, "gatt instance is null");
         }
         context.setConnectionState(ConnectionState.CONNECTING);
       } catch (Exception exception) {
         context.setPendingGattOperation(null);
-        throw exception;
+        throw new BleException(BleException.ERROR_DEVICE_NOT_FOUND, "specified device was not found");
       }
     }
   }
@@ -54,7 +54,7 @@ public class BleGattImpl implements BleGatt {
   public void disconnect(AsyncOperation operation) throws BleException {
     if (context.getConnectionState() == ConnectionState.CONNECTED) {
       if (gatt == null) {
-        throw new BleException(BleLibraryModule.ERROR_GATT, "gatt is undefined");
+        throw new BleException(BleException.ERROR_GATT, "gatt is undefined");
       }
       try {
         context.setPendingGattOperation(new PendingGattDisconnect(emitter, operation));
@@ -71,7 +71,7 @@ public class BleGattImpl implements BleGatt {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void read(AsyncOperation operation, String serviceUuid, String characteristicUuid, int size) throws BleException {
     if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
-      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
+      throw new BleException(BleException.ERROR_NOT_CONNECTED, "not connected");
     }
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, characteristicUuid);
 
@@ -89,7 +89,7 @@ public class BleGattImpl implements BleGatt {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void write(AsyncOperation operation, String serviceUuid, String characteristicUuid, byte[] value, int chunkSize) throws BleException {
     if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
-      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
+      throw new BleException(BleException.ERROR_NOT_CONNECTED, "not connected");
     }
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, characteristicUuid);
 
@@ -107,13 +107,13 @@ public class BleGattImpl implements BleGatt {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void subscribe(String serviceUuid, String characteristicUuid) throws BleException {
     if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
-      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
+      throw new BleException(BleException.ERROR_NOT_CONNECTED, "not connected");
     }
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, characteristicUuid);
 
     boolean result = gatt.setCharacteristicNotification(characteristic, true);
     if (!result) {
-      throw new BleException(BleLibraryModule.ERROR_GATT, "setCharacteristicNotification failed");
+      throw new BleException(BleException.ERROR_GATT, "setCharacteristicNotification failed");
     }
   }
 
@@ -121,13 +121,13 @@ public class BleGattImpl implements BleGatt {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void unsubscribe(String serviceUuid, String characteristicUuid) throws BleException {
     if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
-      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
+      throw new BleException(BleException.ERROR_NOT_CONNECTED, "not connected");
     }
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, characteristicUuid);
 
     boolean result = gatt.setCharacteristicNotification(characteristic, false);
     if (!result) {
-      throw new BleException(BleLibraryModule.ERROR_GATT, "setCharacteristicNotification failed");
+      throw new BleException(BleException.ERROR_GATT, "setCharacteristicNotification failed");
     }
   }
 
@@ -135,14 +135,22 @@ public class BleGattImpl implements BleGatt {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void readRSSI(AsyncOperation operation) throws BleException {
     if (context.getConnectionState() != ConnectionState.CONNECTED || gatt == null) {
-      throw new BleException(BleLibraryModule.ERROR_NOT_CONNECTED, "not connected");
+      throw new BleException(BleException.ERROR_NOT_CONNECTED, "not connected");
     }
 
     context.setPendingGattOperation(new PendingReadRssi(emitter, operation));
 
     boolean result = gatt.readRemoteRssi();
     if (!result) {
-      throw new BleException(BleLibraryModule.ERROR_GATT, "setCharacteristicNotification failed");
+      throw new BleException(BleException.ERROR_GATT, "setCharacteristicNotification failed");
+    }
+  }
+
+  @Override
+  public void cancelPendingOperations() throws BleException {
+    PendingGattOperation operation = context.getPendingGattOperation();
+    if (operation != null) {
+      operation.onCancel(gatt);
     }
   }
 
@@ -156,12 +164,12 @@ public class BleGattImpl implements BleGatt {
   private BluetoothGattCharacteristic getCharacteristic(String serviceUuid, String characteristicUuid) throws BleException {
     BluetoothGattService service = gatt.getService(UUID.fromString(serviceUuid));
     if (service == null) {
-      throw new BleException(BleLibraryModule.ERROR_GATT, "service not found");
+      throw new BleException(BleException.ERROR_GATT, "service not found");
     }
 
     BluetoothGattCharacteristic characteristic = service.getCharacteristic(UUID.fromString(characteristicUuid));
     if (characteristic == null) {
-      throw new BleException(BleLibraryModule.ERROR_GATT, "characteristic not found");
+      throw new BleException(BleException.ERROR_GATT, "characteristic not found");
     }
 
     return characteristic;

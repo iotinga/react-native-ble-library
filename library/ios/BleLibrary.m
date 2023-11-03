@@ -7,8 +7,8 @@
 
 // error codes
 static NSString *const ErrorGeneric = @"BleGenericError";
-static NSString *const ErrorDeviceDisconnected = @"BleDeviceDisconnected";
-static NSString *const ErrorInvalidState = @"BleInvalidState";
+static NSString *const ErrorDeviceDisconnected = @"BleDeviceDisconnectedError";
+static NSString *const ErrorInvalidState = @"BleInvalidStateError";
 static NSString *const ErrorBleNotEnabled = @"BleNotEnabledError";
 static NSString *const ErrorBleNotSupported = @"BleNotSupportedError";
 static NSString *const ErrorMissingPermission = @"BleMissingPermissionError";
@@ -17,7 +17,9 @@ static NSString *const ErrorConnection = @"BleConnectionError";
 static NSString *const ErrorNotConnected = @"BleNotConnectedError";
 static NSString *const ErrorNotInitialized = @"BleNotInitializedError";
 static NSString *const ErrorModuleBusy = @"BleModuleBusyError";
-static NSString *const ErrorInvalidArguments = @"ErrorInvalidArguments";
+static NSString *const ErrorInvalidArguments = @"BleInvalidArgumentsError";
+static NSString *const ErrorOperationCanceled = @"BleOperationCanceledError";
+static NSString *const ErrorDeviceNotFound = @"BleDeviceNotFoundError";
 
 // event types
 static NSString *const EventInitDone = @"initDone";
@@ -146,6 +148,19 @@ RCT_EXPORT_METHOD(disposeModule:(RCTPromiseResolveBlock)resolve
             NSLog(@"[BleLibrary] invalid state received");
             break;
     }
+}
+
+RCT_EXPORT_METHOD(cancelPendingOperations:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+{
+    NSLog(@"[BleLibrary] cancelPendingOperations()");
+
+    [self reject:ErrorOperationCanceled message:@"the current operation was canceles" error:nil];
+    
+    self.write = nil;
+    self.read = nil;
+    
+    resolve(nil);
 }
 
 #pragma mark - BLE scan

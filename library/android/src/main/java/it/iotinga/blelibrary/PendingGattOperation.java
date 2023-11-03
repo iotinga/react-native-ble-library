@@ -44,6 +44,10 @@ public abstract class PendingGattOperation {
     operation.fail(new BleException(BleException.ERROR_INVALID_STATE, "unexpected charWrite"));
   }
 
+  void onCancel(BluetoothGatt gatt) {
+    operation.fail(new BleException(BleException.ERROR_OPERATION_CANCELED, "current operation was canceled"));
+  }
+
   boolean isPending() {
     return operation.isPending();
   }

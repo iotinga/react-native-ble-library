@@ -35,6 +35,7 @@ export interface IBleNativeModule {
   subscribe(service: string, characteristic: string): Promise<void>
   unsubscribe(service: string, characteristic: string): Promise<void>
   readRSSI(): Promise<number>
+  cancelPendingOperations(): Promise<void>
 }
 
 export interface INativeBleInterface extends IBleNativeModule {
@@ -109,6 +110,10 @@ export class NativeBleInterface implements INativeBleInterface {
 
   readRSSI(): Promise<number> {
     return wrap(this.logger, 'readRSSI', this.nativeModule.readRSSI)
+  }
+
+  cancelPendingOperations(): Promise<void> {
+    return wrap(this.logger, 'cancelPendingOperations', this.nativeModule.cancelPendingOperations)
   }
 
   addListener(listener: Partial<IBleNativeEventListener>): Subscription {

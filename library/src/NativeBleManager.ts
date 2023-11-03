@@ -11,6 +11,7 @@ import {
   type ILogger,
   type Subscription,
 } from './types'
+import type { CancelationToken } from './CancelationToken'
 
 // as required by the standard
 const MAX_BLE_CHAR_SIZE = 512
@@ -208,7 +209,8 @@ export class NativeBleManager implements BleManager {
     service: string,
     characteristic: string,
     size?: number,
-    progress?: (current: number, total: number) => void
+    progress?: (current: number, total: number) => void,
+    cancelToken?: CancelationToken
   ): Promise<Buffer> {
     service = service.toLowerCase()
     characteristic = characteristic.toLowerCase()
@@ -225,6 +227,10 @@ export class NativeBleManager implements BleManager {
 
       this.logger?.info(`[BleManager] execute read(${characteristic})`)
 
+      if (cancelToken?.canceled) {
+        throw new BleError(BleErrorCode.BleOperationCanceled, 'operation canceled')
+      }
+
       let subscription: Subscription | undefined
       if (progress !== undefined) {
         subscription = this.nativeInterface!.addListener({
@@ -238,14 +244,19 @@ export class NativeBleManager implements BleManager {
         })
       }
 
+      const cancelSubscription = cancelToken?.addListener(() => {
+        this.nativeInterface!.cancelPendingOperations()
+      })
+
       let result: string
       try {
         result = await this.nativeInterface!.read(service, characteristic, size ?? 0)
       } catch (e: any) {
         throw new BleError(e.code, e.message)
+      } finally {
+        subscription?.unsubscribe()
+        cancelSubscription?.unsubscribe()
       }
-
-      subscription?.unsubscribe()
 
       return Buffer.from(result, 'base64')
     })
@@ -256,7 +267,8 @@ export class NativeBleManager implements BleManager {
     characteristic: string,
     value: Buffer,
     chunkSize = MAX_BLE_CHAR_SIZE,
-    progress?: (current: number, total: number) => void
+    progress?: (current: number, total: number) => void,
+    cancelToken?: CancelationToken
   ): Promise<void> {
     service = service.toLowerCase()
     characteristic = characteristic.toLowerCase()
@@ -281,6 +293,10 @@ export class NativeBleManager implements BleManager {
         })`
       )
 
+      if (cancelToken?.canceled) {
+        throw new BleError(BleErrorCode.BleOperationCanceled, 'operation canceled')
+      }
+
       let subscription: Subscription | undefined
       if (progress !== undefined) {
         subscription = this.nativeInterface!.addListener({
@@ -294,13 +310,18 @@ export class NativeBleManager implements BleManager {
         })
       }
 
+      const cancelSubscription = cancelToken?.addListener(() => {
+        this.nativeInterface!.cancelPendingOperations()
+      })
+
       try {
         await this.nativeInterface!.write(service, characteristic, value.toString('base64'), chunkSize)
       } catch (e: any) {
         throw new BleError(e.code, e.message)
+      } finally {
+        subscription?.unsubscribe()
+        cancelSubscription?.unsubscribe()
       }
-
-      subscription?.unsubscribe()
     })
   }
 
