@@ -56,7 +56,7 @@ function wrap<T extends Array<unknown>, R>(
       return result
     })
     .catch((error) => {
-      logger?.warn(`[NativeBleInterface] ${name}(${args}) rejected (error: ${error})`)
+      logger?.debug(`[NativeBleInterface] ${name}(${args}) rejected (error: ${error})`)
       throw error
     })
 }
