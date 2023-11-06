@@ -62,7 +62,7 @@ RCT_EXPORT_MODULE()
 // called when the module is being unloaded
 -(void)invalidate {
     NSLog(@"[BleLibrary] invalidating native module");
-    
+
     [self dispose];
     [super invalidate];
 }
@@ -156,10 +156,10 @@ RCT_EXPORT_METHOD(cancelPendingOperations:(RCTPromiseResolveBlock)resolve
     NSLog(@"[BleLibrary] cancelPendingOperations()");
 
     [self reject:ErrorOperationCanceled message:@"the current operation was canceled" error:nil];
-    
+
     self.write = nil;
     self.read = nil;
-    
+
     resolve(nil);
 }
 
@@ -425,8 +425,11 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
             @"nativeError": error.description,
         };
         [self sendEventWithName:EventError body:body];
+        [self reject:ErrorDeviceDisconnected message:@"BLE device connection lost" error:nil];
     }
 
+    self.read = nil;
+    self.write = nil;
     self.peripheral = nil;
 }
 

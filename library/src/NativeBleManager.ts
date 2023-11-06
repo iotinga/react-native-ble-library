@@ -1,5 +1,6 @@
 import { NativeEventEmitter, NativeModules } from 'react-native'
 import { BleError, BleErrorCode } from './BleError'
+import type { CancelationToken } from './CancelationToken'
 import { NativeBleInterface, type INativeBleInterface } from './NativeBleInterface'
 import { PromiseSequencer } from './PromiseSequencer'
 import {
@@ -11,10 +12,11 @@ import {
   type ILogger,
   type Subscription,
 } from './types'
-import type { CancelationToken } from './CancelationToken'
 
 // as required by the standard
 const MAX_BLE_CHAR_SIZE = 512
+
+const OPERATION_TIMEOUT_MS = 10 * 1000
 
 export class NativeBleManager implements BleManager {
   private nativeInterface: INativeBleInterface | null = null
@@ -140,69 +142,69 @@ export class NativeBleManager implements BleManager {
     }
   }
 
-  connect(id: string, mtu?: number, onError?: (error: BleError) => void): Promise<BleConnectedDeviceInfo> {
-    this.logger?.info(`[BleManager] enqueue connect(${id}, ${mtu})`)
-    return this.sequencer.execute(async () => {
-      this.logger?.info(`[BleManager] execute connect(${id}, ${mtu})`)
+  async connect(id: string, mtu?: number, onError?: (error: BleError) => void): Promise<BleConnectedDeviceInfo> {
+    this.logger?.info(`[BleManager] execute connect(${id}, ${mtu})`)
 
-      this.ensureInitialized()
-
-      if (this.connectedDevice !== null) {
-        throw new BleError(BleErrorCode.BleAlreadyConnectedError, 'BLE device already connected, call disconnect first')
-      }
-
-      if (this.onErrorSubscription) {
-        this.onErrorSubscription.unsubscribe()
-      }
-      this.onErrorSubscription = this.nativeInterface!.addListener({
-        onError: (data) => {
-          if (data.error === BleErrorCode.BleDeviceDisconnectedError) {
-            this.logger?.error(`[BleManager] device disconnected`, data)
-
-            this.connectedDevice = null
-
-            if (onError !== undefined) {
-              onError(new BleError(data.error, data.message))
-            }
-          }
-        },
-      })
-
-      try {
-        const { services } = await this.nativeInterface!.connect(id, mtu ?? 0)
-        this.logger?.debug(`[BleManager] connected to ${id}`, JSON.stringify(services, null, 2))
-
-        this.connectedDevice = {
-          id,
-          services,
-        }
-        this.nSubscriptions.clear()
-
-        return this.connectedDevice
-      } catch (e: any) {
-        throw new BleError(e.code, e.message)
-      }
-    })
-  }
-
-  disconnect(): Promise<void> {
     this.ensureInitialized()
 
-    this.logger?.info('[BleManager] enqueue disconnect()')
-    return this.sequencer.execute(async () => {
-      this.logger?.info('[BleManager] execute disconnect()')
-      if (this.connectedDevice) {
-        try {
-          await this.nativeInterface!.disconnect()
-        } catch (e: any) {
-          throw new BleError(e.code, e.message)
-        } finally {
-          this.onErrorSubscription?.unsubscribe()
+    if (this.connectedDevice !== null) {
+      throw new BleError(BleErrorCode.BleAlreadyConnectedError, 'BLE device already connected, call disconnect first')
+    }
+
+    // cancel eventual pending operations on the interface (if any)
+    await this.nativeInterface!.cancelPendingOperations()
+
+    if (this.onErrorSubscription) {
+      this.onErrorSubscription.unsubscribe()
+    }
+    this.onErrorSubscription = this.nativeInterface!.addListener({
+      onError: (data) => {
+        if (data.error === BleErrorCode.BleDeviceDisconnectedError) {
+          this.logger?.error(`[BleManager] device disconnected`, data)
+
           this.connectedDevice = null
-          this.nSubscriptions.clear()
+
+          if (onError !== undefined) {
+            onError(new BleError(data.error, data.message))
+          }
         }
-      }
+      },
     })
+
+    try {
+      const { services } = await this.nativeInterface!.connect(id, mtu ?? 0)
+      this.logger?.debug(`[BleManager] connected to ${id}`, JSON.stringify(services, null, 2))
+
+      this.connectedDevice = {
+        id,
+        services,
+      }
+      this.nSubscriptions.clear()
+
+      return this.connectedDevice
+    } catch (e: any) {
+      throw new BleError(e.code, e.message)
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    this.ensureInitialized()
+
+    this.logger?.info('[BleManager] execute disconnect()')
+    if (this.connectedDevice) {
+      try {
+        // cancel eventual pending operations on the interface (if any)
+        await this.nativeInterface!.cancelPendingOperations()
+
+        await this.nativeInterface!.disconnect()
+      } catch (e: any) {
+        throw new BleError(e.code, e.message)
+      } finally {
+        this.onErrorSubscription?.unsubscribe()
+        this.connectedDevice = null
+        this.nSubscriptions.clear()
+      }
+    }
   }
 
   read(

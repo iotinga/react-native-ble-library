@@ -15,4 +15,10 @@ public class PendingGattDisconnect extends PendingGattOperation {
     context.setConnectionState(ConnectionState.DISCONNECTED);
     operation.complete();
   }
+
+  @Override
+  void onError(int gattError) {
+    super.onError(gattError);
+    context.setConnectionState(ConnectionState.DISCONNECTED);
+  }
 }

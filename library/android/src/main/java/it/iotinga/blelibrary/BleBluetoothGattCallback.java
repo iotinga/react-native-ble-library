@@ -28,23 +28,22 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
 
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
-  public void onConnectionStateChange(@NonNull BluetoothGatt gatt, int status, int newState) {
-    Log.d(TAG, "onConnectionStateChange - status: " + status + ", newState: " + newState);
+  public void onConnectionStateChange(@NonNull BluetoothGatt gatt, int status, int connectionState) {
+    Log.d(TAG, "onConnectionStateChange - status: " + status + ", newState: " + connectionState);
 
     PendingGattOperation operation = connectionContext.getPendingGattOperation();
     if (operation != null) {
       if (status != BluetoothGatt.GATT_SUCCESS) {
         operation.onError(status);
-      } else if (newState == BluetoothProfile.STATE_CONNECTED) {
+      } else if (connectionState == BluetoothProfile.STATE_CONNECTED) {
         operation.onConnected(gatt);
-      } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+      } else if (connectionState == BluetoothProfile.STATE_DISCONNECTED) {
         operation.onDisconnected(gatt);
       }
     }
 
     // if an error occurred or I'm disconnected signal the JS and reset connection state
-    if (status != BluetoothGatt.GATT_SUCCESS
-        && newState == BluetoothProfile.STATE_DISCONNECTED
+    if (connectionState == BluetoothProfile.STATE_DISCONNECTED
         && connectionContext.getConnectionState() != ConnectionState.DISCONNECTED) {
       connectionContext.setConnectionState(ConnectionState.DISCONNECTED);
       eventEmitter.emitError(BleException.ERROR_DEVICE_DISCONNECTED, "device disconnected");
