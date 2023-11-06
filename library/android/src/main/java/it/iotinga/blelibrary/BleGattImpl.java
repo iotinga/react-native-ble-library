@@ -46,6 +46,8 @@ public class BleGattImpl implements BleGatt {
         context.setPendingGattOperation(null);
         throw new BleException(BleException.ERROR_DEVICE_NOT_FOUND, "specified device was not found");
       }
+    } else {
+      throw new BleException(BleException.ERROR_INVALID_STATE, "a device is already connected");
     }
   }
 
@@ -57,13 +59,15 @@ public class BleGattImpl implements BleGatt {
         throw new BleException(BleException.ERROR_GATT, "gatt is undefined");
       }
       try {
-        context.setPendingGattOperation(new PendingGattDisconnect(emitter, operation));
+        context.setPendingGattOperation(new PendingGattDisconnect(emitter, operation, context));
         gatt.disconnect();
         context.setConnectionState(ConnectionState.DISCONNECTING);
       } catch (Exception exception) {
         context.setPendingGattOperation(null);
         throw exception;
       }
+    } else {
+      throw new BleException(BleException.ERROR_INVALID_STATE, "a device is not connected");
     }
   }
 
