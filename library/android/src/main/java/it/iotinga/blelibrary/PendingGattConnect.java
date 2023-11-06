@@ -70,4 +70,10 @@ public class PendingGattConnect extends PendingGattOperation {
     data.putArray("services", services);
     operation.complete(data);
   }
+
+  @Override
+  void onError(int gattError) {
+    context.setConnectionState(ConnectionState.DISCONNECTED);
+    operation.fail(new BleException(BleException.ERROR_CONNECTION, "connection failed, code: " + gattError));
+  }
 }

@@ -43,7 +43,9 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     }
 
     // if an error occurred or I'm disconnected signal the JS and reset connection state
-    if (status != BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
+    if (status != BluetoothGatt.GATT_SUCCESS
+        && newState == BluetoothProfile.STATE_DISCONNECTED
+        && connectionContext.getConnectionState() != ConnectionState.DISCONNECTED) {
       connectionContext.setConnectionState(ConnectionState.DISCONNECTED);
       eventEmitter.emitError(BleException.ERROR_DEVICE_DISCONNECTED, "device disconnected");
       PendingGattOperation pendingGattOperation = connectionContext.getPendingGattOperation();
