@@ -32,7 +32,8 @@ public class BleGattImpl implements BleGatt {
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void connect(AsyncOperation operation, String id, int mtu) throws BleException {
-    if (context.getConnectionState() == ConnectionState.DISCONNECTED) {
+    if (context.getConnectionState() == ConnectionState.DISCONNECTED
+      || context.getConnectionState() == ConnectionState.DISCONNECTING) {
       try {
         BluetoothDevice device = adapter.getRemoteDevice(id);
 
@@ -54,7 +55,7 @@ public class BleGattImpl implements BleGatt {
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void disconnect(AsyncOperation operation) throws BleException {
-    if (context.getConnectionState() == ConnectionState.CONNECTED) {
+    if (context.getConnectionState() != ConnectionState.DISCONNECTED) {
       if (gatt == null) {
         throw new BleException(BleException.ERROR_GATT, "gatt is undefined");
       }
