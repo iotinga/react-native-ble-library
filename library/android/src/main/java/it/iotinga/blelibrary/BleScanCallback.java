@@ -2,6 +2,7 @@ package it.iotinga.blelibrary;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.util.Log;
@@ -25,11 +26,18 @@ public class BleScanCallback extends ScanCallback {
 
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   private WritableMap scanResultToWritableMap(ScanResult result, boolean available) {
-
     BluetoothDevice device = result.getDevice();
+    ScanRecord record = result.getScanRecord();
+
+    String name;
+    if (record != null) {
+      name = record.getDeviceName();
+    } else {
+      name = device.getName();
+    }
 
     WritableMap deviceInfo = Arguments.createMap();
-    deviceInfo.putString("name", device.getName());
+    deviceInfo.putString("name", name);
     deviceInfo.putString("id", device.getAddress());
     deviceInfo.putInt("rssi", result.getRssi());
     deviceInfo.putBoolean("available", available);
