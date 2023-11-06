@@ -11,9 +11,11 @@ import com.facebook.react.bridge.WritableMap;
 import java.util.Base64;
 
 public class PendingGattRead extends PendingGattOperation {
+  private static final byte EOF_BYTE = (byte) 0xff;
+
   private final Base64.Encoder b64Encoder = Base64.getEncoder();
   private int receivedBytes = 0;
-  private int totalSize = 0;
+  private int totalSize;
   private byte[] data;
 
   PendingGattRead(EventEmitter emitter, AsyncOperation operation, int totalSize) {
@@ -30,8 +32,12 @@ public class PendingGattRead extends PendingGattOperation {
 
   private void onChunk(byte[] bytes) {
     if (data != null) {
-      for (byte b : bytes) {
-        data[receivedBytes++] = b;
+      if (data.length == 1 && data[0] == EOF_BYTE) {
+        this.totalSize = data.length;
+      } else {
+        for (byte b : bytes) {
+          data[receivedBytes++] = b;
+        }
       }
     } else {
       data = bytes;
