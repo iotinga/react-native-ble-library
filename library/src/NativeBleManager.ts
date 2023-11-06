@@ -16,7 +16,8 @@ import {
 // as required by the standard
 const MAX_BLE_CHAR_SIZE = 512
 
-const OPERATION_TIMEOUT_MS = 10 * 1000
+const CONNECT_RETRY_DELAY_MS = 1000
+const CONNECT_RETRY_INTERVAL_MS = 5000
 
 export class NativeBleManager implements BleManager {
   private nativeInterface: INativeBleInterface | null = null
@@ -142,17 +143,26 @@ export class NativeBleManager implements BleManager {
     }
   }
 
-  async connect(id: string, mtu?: number, onError?: (error: BleError) => void): Promise<BleConnectedDeviceInfo> {
+  async connect(
+    id: string,
+    mtu?: number,
+    onError?: (error: BleError) => void,
+    start = Date.now()
+  ): Promise<BleConnectedDeviceInfo> {
     this.logger?.info(`[BleManager] execute connect(${id}, ${mtu})`)
 
     this.ensureInitialized()
 
-    if (this.connectedDevice !== null) {
-      throw new BleError(BleErrorCode.BleAlreadyConnectedError, 'BLE device already connected, call disconnect first')
-    }
-
     // cancel eventual pending operations on the interface (if any)
     await this.nativeInterface!.cancelPendingOperations()
+
+    try {
+      await this.nativeInterface!.disconnect()
+    } catch (e) {
+      this.logger?.debug(`[BleManager] error disconnecting, this is expected`, e)
+    }
+
+    this.connectedDevice = null
 
     if (this.onErrorSubscription) {
       this.onErrorSubscription.unsubscribe()
@@ -183,7 +193,15 @@ export class NativeBleManager implements BleManager {
 
       return this.connectedDevice
     } catch (e: any) {
-      throw new BleError(e.code, e.message)
+      if (Date.now() - start < CONNECT_RETRY_INTERVAL_MS) {
+        this.logger?.warn(`[BleManager] error connecting to ${id}, retrying in ${CONNECT_RETRY_DELAY_MS}...`, e)
+
+        await new Promise((resolve) => setTimeout(resolve, CONNECT_RETRY_DELAY_MS))
+
+        return this.connect(id, mtu, onError, start)
+      } else {
+        throw new BleError(e.code, e.message)
+      }
     }
   }
 
