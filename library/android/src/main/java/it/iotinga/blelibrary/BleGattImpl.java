@@ -55,7 +55,8 @@ public class BleGattImpl implements BleGatt {
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void disconnect(AsyncOperation operation) throws BleException {
-    if (context.getConnectionState() != ConnectionState.DISCONNECTED) {
+    if (context.getConnectionState() == ConnectionState.CONNECTING
+      || context.getConnectionState() == ConnectionState.CONNECTED) {
       if (gatt == null) {
         throw new BleException(BleException.ERROR_GATT, "gatt is undefined");
       }

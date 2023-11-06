@@ -157,11 +157,25 @@ export class NativeBleManager implements BleManager {
     await this.nativeInterface!.cancelPendingOperations()
 
     try {
-      await this.nativeInterface!.disconnect()
+      // disconnect, or continue after a timeout of 2000ms
+      await Promise.race([
+        this.nativeInterface!.disconnect(),
+        new Promise((_, reject) =>
+          setTimeout(() => {
+            reject('timeout')
+          }, 2000)
+        ),
+      ])
     } catch (e) {
       this.logger?.debug(`[BleManager] error disconnecting, this is expected`, e)
+
+      if (e === 'timeout') {
+        // cancel rejected disconnect operation
+        await this.nativeInterface!.cancelPendingOperations()
+      }
     }
 
+    // now we should be in a state where it's safe to connect the device (hopefully)
     this.connectedDevice = null
 
     if (this.onErrorSubscription) {
