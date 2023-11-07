@@ -23,6 +23,4 @@
 
 @property(strong, nullable) PendingWrite *write;
 @property(strong, nullable) PendingRead *read;
-
-@property(strong, nullable) NSTimer *timeout;
 @end

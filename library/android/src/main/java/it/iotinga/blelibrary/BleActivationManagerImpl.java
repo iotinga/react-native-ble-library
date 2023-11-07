@@ -12,7 +12,7 @@ import com.facebook.react.bridge.ActivityEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
 
 public class BleActivationManagerImpl implements BleActivationManager, ActivityEventListener {
-  private static String TAG = "BleActivationManagerImpl";
+  private static final String TAG = "BleActivationManager";
 
   private final static int REQUEST_ENABLE_BT = 1;
   private final BluetoothAdapter adapter;

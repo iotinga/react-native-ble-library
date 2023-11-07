@@ -1,14 +1,28 @@
-import { BleError, BleErrorCode } from './BleError'
-import type { BleConnectedDeviceInfo, BleDeviceInfo, DemoState, BleManager, Subscription } from './types'
+import { BleError } from './BleError'
+import {
+  ConnectionState,
+  type BleConnectedDeviceInfo,
+  type BleDeviceInfo,
+  type BleManager,
+  type DemoState,
+  type Subscription,
+} from './types'
 
 export class DemoBleManager implements BleManager {
   private values = new Map<string, Buffer>()
 
   constructor(private demoState: DemoState) {}
 
+  onConnectionStateChanged(callback: (state: ConnectionState, error: BleError | null) => void): Subscription {
+    return {
+      unsubscribe: () => {},
+    }
+  }
+
   get device(): BleConnectedDeviceInfo {
     return {
       id: this.demoState.devices[0]!.id,
+      connectionState: ConnectionState.CONNECTED,
       services: this.demoState.services,
     }
   }

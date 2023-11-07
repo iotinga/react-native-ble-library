@@ -19,7 +19,7 @@ export function InitScreen() {
           navigation.replace('Scan')
         })
         .catch(e => {
-          if (e instanceof BleError && e.code === BleErrorCode.BleNotEnabledError) {
+          if (e instanceof BleError && e.code === BleErrorCode.ERROR_BLE_NOT_ENABLED) {
             Alert.alert('Error', 'Bluetooth is not enabled. Open the settings to enable it', [
               {
                 text: 'Cancel',
@@ -32,7 +32,7 @@ export function InitScreen() {
                 style: 'default',
               },
             ])
-          } else if (e instanceof BleError && e.code === BleErrorCode.BleMissingPermissionError) {
+          } else if (e instanceof BleError && e.code === BleErrorCode.ERROR_MISSING_PERMISSIONS) {
             Alert.alert('Error', 'Permissions are not granted. You should open the settings and enable them', [
               {
                 text: 'Cancel',

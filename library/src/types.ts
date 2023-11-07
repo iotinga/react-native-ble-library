@@ -15,6 +15,15 @@ export type BleDeviceInfo = {
   available: boolean
 }
 
+export enum ConnectionState {
+  CONNECTING_TO_DEVICE = 'CONNECTING_TO_DEVICE',
+  REQUESTING_MTU = 'REQUESTING_MTU',
+  DISCOVERING_SERVICES = 'DISCOVERING_SERVICES',
+  CONNECTED = 'CONNECTED',
+  DISCONNECTING = 'DISCONNECTING',
+  DISCONNECTED = 'DISCONNECTED',
+}
+
 export type Subscription = {
   /** removes the subscription */
   unsubscribe: () => void
@@ -51,8 +60,11 @@ export type BleConnectedDeviceInfo = {
   /** ID of the device */
   id: string
 
+  /** connection state */
+  connectionState: ConnectionState
+
   /** list of services exposed from the device */
-  services: BleServiceInfo[]
+  services?: BleServiceInfo[]
 }
 
 export interface BleManager {
@@ -87,14 +99,26 @@ export interface BleManager {
    * device (if allowed by the operating system), otherwise the default (that
    * depends on the OS implementation) is used.
    *
+   * This function succeeds when it configured the BLE interface to connect to the device.
+   * You must then listen for the {@link BleManager.onConnectionStateChanged} event to know
+   * if the device connected. The module will try to connect to the device till either {@link BleManager.disconnect}
+   * or {@link BleManager.dispose} is called.
+   *
    * @param id id of the device to connect to. Should correspond to one device found in a previous scan!
    * @param mtu the MTU to set to the device when connecting. This is only relevant on Android,
    *  since on iOS the MTU is negotiated automatically. If not specified uses the default from the BLE driver.
-   * @param onError callback that is invoked in case of connection error
    * @return info of the connected device
    * @throws {BleError} in case of an error
    */
-  connect(id: string, mtu?: number, onError?: (error: BleError) => void): Promise<BleConnectedDeviceInfo>
+  connect(id: string, mtu?: number): Promise<BleConnectedDeviceInfo>
+
+  /**
+   * Set a callback to be invoked each time the device connection information changes
+   *
+   * @param callback callback to invoke
+   * @returns a subscription for the event
+   */
+  onConnectionStateChanged(callback: (state: ConnectionState, error: BleError | null) => void): Subscription
 
   /**
    * @return the connected device info if any, otherwise null

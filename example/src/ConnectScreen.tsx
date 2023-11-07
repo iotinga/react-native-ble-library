@@ -1,4 +1,4 @@
-import { BleError } from '@iotinga/react-native-ble-library'
+import { ConnectionState } from '@iotinga/react-native-ble-library'
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useEffect } from 'react'
@@ -13,35 +13,53 @@ export function ConnectScreen() {
   const manager = useBleManager()
 
   useEffect(() => {
-    const onError = (error: BleError) => {
-      Alert.alert('Error', 'Connection to device lost!', [
+    const timeout = setTimeout(() => {
+      Alert.alert('Error', 'Timeout connecting to BLE device', [
         {
-          text: 'Ok',
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => navigation.goBack(),
+        },
+        {
+          text: 'Keep waiting',
           style: 'default',
-          onPress: () =>
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Scan' }],
-            }),
+          onPress: () => {},
         },
       ])
-    }
+    }, 5000)
 
-    manager
-      .disconnect()
-      .then(() => manager.connect(route.params.id, undefined, onError))
-      .then(() => {
+    const subscription = manager.onConnectionStateChanged((state, error) => {
+      if (state === ConnectionState.CONNECTED) {
+        clearTimeout(timeout)
         navigation.replace('DeviceInfo')
-      })
-      .catch(e => {
-        Alert.alert('Error', 'Error connecting BLE device: ' + e.message, [
+      }
+
+      if (state !== ConnectionState.CONNECTING_TO_DEVICE && error !== undefined) {
+        clearTimeout(timeout)
+        Alert.alert('Error', 'Error connecting BLE device: ' + error.message, [
           {
             text: 'Ok',
             style: 'default',
             onPress: () => navigation.goBack(),
           },
         ])
-      })
+      }
+    })
+
+    manager.connect(route.params.id, undefined).catch(e => {
+      Alert.alert('Error', 'Error connecting BLE device: ' + e.message, [
+        {
+          text: 'Ok',
+          style: 'default',
+          onPress: () => navigation.goBack(),
+        },
+      ])
+    })
+
+    return () => {
+      clearTimeout(timeout)
+      subscription.unsubscribe()
+    }
   })
 
   return (

@@ -1,0 +1,8 @@
+#import <Foundation/Foundation.h>
+
+static NSString *const STATE_CONNECTING_TO_DEVICE = @"CONNECTING_TO_DEVICE";
+static NSString *const STATE_REQUESTING_MTU = @"REQUESTING_MTU";
+static NSString *const STATE_DISCOVERING_SERVICES = @"DISCOVERING_SERVICES";
+static NSString *const STATE_CONNECTED = @"CONNECTED";
+static NSString *const STATE_DISCONNECTING = @"DISCONNECTING";
+static NSString *const STATE_DISCONNECTED = @"DISCONNECTED";

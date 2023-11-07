@@ -1,33 +1,14 @@
+#import <Foundation/Foundation.h>
+
 #import "BleLibrary.h"
+#import "BleErrorCode.h"
+#import "BleNativeEvent.h"
+#import "ConnectionState.h"
 
 // disable logging in production builds
 #ifndef DEBUG
 #define NSLog(...)
 #endif
-
-// error codes
-static NSString *const ErrorGeneric = @"BleGenericError";
-static NSString *const ErrorDeviceDisconnected = @"BleDeviceDisconnectedError";
-static NSString *const ErrorInvalidState = @"BleInvalidStateError";
-static NSString *const ErrorBleNotEnabled = @"BleNotEnabledError";
-static NSString *const ErrorBleNotSupported = @"BleNotSupportedError";
-static NSString *const ErrorMissingPermission = @"BleMissingPermissionError";
-static NSString *const ErrorGATT = @"BleGATTError";
-static NSString *const ErrorConnection = @"BleConnectionError";
-static NSString *const ErrorNotConnected = @"BleNotConnectedError";
-static NSString *const ErrorNotInitialized = @"BleNotInitializedError";
-static NSString *const ErrorModuleBusy = @"BleModuleBusyError";
-static NSString *const ErrorInvalidArguments = @"BleInvalidArgumentsError";
-static NSString *const ErrorOperationCanceled = @"BleOperationCanceledError";
-static NSString *const ErrorDeviceNotFound = @"BleDeviceNotFoundError";
-
-// event types
-static NSString *const EventInitDone = @"initDone";
-static NSString *const EventError = @"error";
-static NSString *const EventScanResult = @"scanResult";
-static NSString *const EventCharValueChanged = @"charValueChanged";
-static NSString *const EventReadProgress = @"readProgress";
-static NSString *const EventWriteProgress = @"writeProgress";
 
 static NSTimeInterval CONNECTION_TIMEOUT_SECONDS = 5.0;
 
@@ -50,12 +31,12 @@ RCT_EXPORT_MODULE()
 // should returns a list of events that the JS module can add listeners to
 -(NSArray<NSString *> *)supportedEvents {
     return @[
-        EventInitDone,
-        EventError,
-        EventScanResult,
-        EventCharValueChanged,
-        EventReadProgress,
-        EventWriteProgress,
+        EVENT_ERROR,
+        EVENT_SCAN_RESULT,
+        EVENT_CHAR_VALUE_CHANGED,
+        EVENT_PROGRESS,
+        EVENT_CONNECTION_STATE_CHANGED,
+        EVENT_SERVICE_DISCOVERED,
     ];
 }
 
@@ -76,7 +57,7 @@ RCT_EXPORT_MODULE()
             self.timeout = nil;
         }
         if ([self hasPendingPromise]) {
-            [self reject:ErrorGeneric message:@"module is shutting down" error:nil];
+            [self reject:ERROR_GENERIC message:@"module is shutting down" error:nil];
         }
         if ([self.manager isScanning]) {
             NSLog(@"[BLeLibrary] stopping scan");
@@ -122,22 +103,22 @@ RCT_EXPORT_METHOD(disposeModule:(RCTPromiseResolveBlock)resolve
         case CBManagerStateUnknown:
         case CBManagerStateResetting:
             NSLog(@"[BleLibrary] BLE unsupported or internal error");
-            [self reject:ErrorInvalidState message:@"invalid state" error:nil];
+            [self reject:ERROR_INVALID_STATE message:@"invalid state" error:nil];
             self.manager = nil;
             break;
         case CBManagerStateUnsupported:
             NSLog(@"[BleLibrary] BLE unsupported on this device");
-            [self reject:ErrorBleNotSupported message:@"BLE not supported on this device" error:nil];
+            [self reject:ERROR_BLE_NOT_SUPPORTED message:@"BLE not supported on this device" error:nil];
             self.manager = nil;
             break;
         case CBManagerStateUnauthorized:
             NSLog(@"[BleLibrary] permission missing");
-            [self reject:ErrorMissingPermission message:@"missing BLE permissions" error:nil];
+            [self reject:ERROR_MISSING_PERMISSIONS message:@"missing BLE permissions" error:nil];
             self.manager = nil;
             break;
         case CBManagerStatePoweredOff:
             NSLog(@"[BleLibrary] BLE is turned OFF");
-            [self reject:ErrorBleNotEnabled message:@"BLE is off" error:nil];
+            [self reject:ERROR_BLE_NOT_ENABLED message:@"BLE is off" error:nil];
             self.manager = nil;
             break;
         case CBManagerStatePoweredOn:
@@ -173,10 +154,10 @@ RCT_EXPORT_METHOD(scanStart:(NSArray<NSString *> *)serviceUuids
 
     if (self.manager == nil) {
         NSLog(@"[BleLibrary] manager is not initialized");
-        reject(ErrorNotInitialized, @"call initModule first", nil);
+        reject(ERROR_NOT_INITIALIZED, @"call initModule first", nil);
     } else if (![self isBlePoweredOn]) {
         NSLog(@"[BleLibrary] BLE is not enabled");
-        reject(ErrorBleNotEnabled, @"BLE is not enabled", nil);
+        reject(ERROR_BLE_NOT_ENABLED, @"BLE is not enabled", nil);
     } else if ([self.manager isScanning]) {
         NSLog(@"[BleLibrary] already running");
         resolve(nil);
@@ -204,10 +185,10 @@ RCT_EXPORT_METHOD(scanStop:(RCTPromiseResolveBlock)resolve
 
     if (self.manager == nil) {
         NSLog(@"[BleLibrary] manager is not initialized");
-        reject(ErrorNotInitialized, @"call initModule first", nil);
+        reject(ERROR_NOT_INITIALIZED, @"call initModule first", nil);
     } else if (![self isBlePoweredOn]) {
         NSLog(@"[BleLibrary] BLE is not enabled");
-        reject(ErrorBleNotEnabled, @"BLE is not enabled", nil);
+        reject(ERROR_BLE_NOT_ENABLED, @"BLE is not enabled", nil);
     } else if (self.manager.isScanning) {
         NSLog(@"[BleLibrary] stoping scan");
         [self.manager stopScan];
@@ -238,7 +219,7 @@ didDiscoverPeripheral:(CBPeripheral *)peripheral
     };
 
     NSLog(@"[BleLibrary] sending scan result to JS %@", result);
-    [self sendEventWithName:EventScanResult body:result];
+    [self sendEventWithName:EVENT_SCAN_RESULT body:result];
 }
 
 #pragma mark - BLE connection
@@ -252,69 +233,56 @@ RCT_EXPORT_METHOD(connect:(NSString *)deviceId
 
     if (self.manager == nil) {
         NSLog(@"[BleLibrary] module is not initalized");
-        reject(ErrorNotInitialized, @"call initModule first", nil);
+        reject(ERROR_NOT_INITIALIZED, @"call initModule first", nil);
     } else if (![self isBlePoweredOn]) {
         NSLog(@"[BleLibrary] BLE is not enabled");
-        reject(ErrorBleNotEnabled, @"BLE is not enabled", nil);
-    } else if ([self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] an async operation is already in progress");
-        reject(ErrorModuleBusy, @"an operation is already in progress", nil);
-    } else if ([self isConnected]) {
-        NSLog(@"[BleLibrary] a device is already connected");
-        reject(ErrorInvalidState, @"the device is already connected. Call disconnect first!", nil);
+        reject(ERROR_BLE_NOT_ENABLED, @"BLE is not enabled", nil);
     } else {
+        if (self.peripheral) {
+            NSLog(@"[BleLibrary] a peripherial is already connected. Disconnect it first");
+            [self.manager cancelPeripheralConnection:self.peripheral];
+            self.peripheral = nil;
+        }
+
         NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:deviceId];
         if (uuid == nil) {
             NSLog(@"[BleLibrary] invalid UUID");
-            reject(ErrorInvalidArguments, @"the deviceId must be a valid UUID", nil);
+            reject(ERROR_INVALID_ARGUMENTS, @"the deviceId must be a valid UUID", nil);
         } else {
-            NSArray<NSUUID *> *deviceUuids = @[uuid];
-            NSArray<CBPeripheral *> *peripherals = [self.manager retrievePeripheralsWithIdentifiers:deviceUuids];
+            NSArray<CBPeripheral *> *peripherals = [self.manager retrievePeripheralsWithIdentifiers: @[uuid]];
             if (peripherals.count == 0 || peripherals[0] == nil) {
                 NSLog(@"[BleLibrary] peripheral with UUID %@ not found", uuid);
-                reject(ErrorInvalidArguments, @"peripheral with such UUID not found", nil);
+                reject(ERROR_INVALID_ARGUMENTS, @"peripheral with such UUID not found", nil);
             } else {
                 // note: it's important to keep a reference for the peripherial, otherwise the manager will
                 // cancel the connection!
                 self.peripheral = peripherals[0];
+                [self.peripheral setDelegate:self];
 
                 NSLog(@"[BleLibrary] requesting connect");
-                [self setPromise:resolve reject:reject];
                 [self.manager connectPeripheral:self.peripheral options:nil];
-
-                // the
-                self.timeout = [NSTimer timerWithTimeInterval:CONNECTION_TIMEOUT_SECONDS target:self selector:@selector(onConnectionTimeout) userInfo:nil repeats:NO];
-                [[NSRunLoop mainRunLoop] addTimer:self.timeout forMode:NSDefaultRunLoopMode];
+                
+                resolve(nil);
             }
         }
     }
-}
-
--(void)onConnectionTimeout {
-    NSLog(@"[BleLibrary] connection timed out");
-
-    if (self.manager != nil && self.peripheral != nil && [self.peripheral state] == CBPeripheralStateConnecting) {
-        NSLog(@"[BleLibrary] canceling peripherial connection");
-
-        [self.manager cancelPeripheralConnection:self.peripheral];
-
-        self.peripheral = nil;
-
-        [self reject:ErrorConnection message:@"connection timed out" error:nil];
-    }
-
-    self.timeout = nil;
 }
 
 // callback that is invoked when a connection with a device fails
 -(void)centralManager:(CBCentralManager *)central
 didFailToConnectPeripheral:(CBPeripheral *)peripheral
                 error:(NSError *)error {
-    NSLog(@"[BleLibrary] connection to peripheral %@ failed (error: %@)", peripheral, error);
+    NSLog(@"[BleLibrary] error connecting to peripheral %@ (error: %@)", peripheral, error);
 
-    self.peripheral = nil;
-
-    [self reject:ErrorConnection message:@"error connecting to peripheral" error:error];
+    [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
+        @"state": STATE_DISCONNECTED,
+        @"error": ERROR_GATT,
+        @"message": @"connection to device failed",
+        @"ios": @{
+            @"code": @(error.code),
+            @"description": error.description,
+        },
+    }];
 }
 
 // callback that is invoked when a peripheral is connected to the manager
@@ -322,8 +290,13 @@ didFailToConnectPeripheral:(CBPeripheral *)peripheral
  didConnectPeripheral:(CBPeripheral *)peripheral {
     NSLog(@"[BleLibrary] connected to peripheral %@. Start service discovery", peripheral);
 
-    // after the connection, before saying to the app that the connection is done, I start the service discovery
-    [peripheral setDelegate:self];
+    [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
+        @"state": STATE_DISCOVERING_SERVICES,
+        @"error": [NSNull null],
+        @"message": @"starting service discovery",
+        @"ios": @{},
+    }];
+
     [peripheral discoverServices:nil];
 }
 
@@ -332,6 +305,13 @@ didFailToConnectPeripheral:(CBPeripheral *)peripheral
 didDiscoverServices:(NSError *)error {
     if (error == nil) {
         NSLog(@"[BleLibrary] service discovery complete");
+
+        [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
+            @"state": STATE_DISCOVERING_SERVICES,
+            @"error": [NSNull null],
+            @"message": @"service discovery ok, starting characteristic discovery",
+            @"ios": @{},
+        }];
 
         NSArray<CBService *> *services = peripheral.services;
         for (CBService *service in services) {
@@ -342,7 +322,16 @@ didDiscoverServices:(NSError *)error {
         NSLog(@"[BleLibrary] service discovery done, now waiting to discover all characteristics");
     } else {
         NSLog(@"[BleLibrary] error discovering services (error: %@)", error);
-        [self reject:ErrorGATT message:@"error discovering services" error:error];
+
+        [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
+            @"state": STATE_DISCONNECTED,
+            @"error": ERROR_GATT,
+            @"message": @"service discovery failed",
+            @"ios": @{
+                @"code": @(error.code),
+                @"description": error.description,
+            },
+        }];
     }
 }
 
