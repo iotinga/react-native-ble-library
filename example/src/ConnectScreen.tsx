@@ -34,7 +34,7 @@ export function ConnectScreen() {
         navigation.replace('DeviceInfo')
       }
 
-      if (state !== ConnectionState.CONNECTING_TO_DEVICE && error !== undefined) {
+      if (state !== ConnectionState.CONNECTING_TO_DEVICE && error !== null) {
         clearTimeout(timeout)
         Alert.alert('Error', 'Error connecting BLE device: ' + error.message, [
           {

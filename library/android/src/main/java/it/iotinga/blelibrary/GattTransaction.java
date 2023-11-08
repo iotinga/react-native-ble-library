@@ -18,10 +18,6 @@ public abstract class GattTransaction extends PromiseTransaction {
     this.gatt = gatt;
   }
 
-  void onDeviceNotConnected() {
-    fail(BleError.ERROR_NOT_CONNECTED, "the device is not connected");
-  }
-
   void onCharRead(BluetoothGattCharacteristic characteristic) {
     fail(BleError.ERROR_INVALID_STATE, "unexpected onCharRead");
   }

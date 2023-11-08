@@ -1,15 +1,17 @@
 #import <Foundation/Foundation.h>
 #import <CoreBluetooth/CoreBluetooth.h>
 
+#import "Transaction.h"
+
 NS_ASSUME_NONNULL_BEGIN
 
-@interface PendingRead : NSObject
+@interface PendingRead : Transaction
 @property NSUInteger size;
 @property NSUInteger read;
 @property(strong) NSMutableData *data;
-@property(weak, nullable) CBCharacteristic *characteristic;
 
--(id)init:(NSUInteger)size characteristic:(CBCharacteristic *_Nonnull)characteristic;
+-(id)init:(NSString *)transactionId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+     size:(NSUInteger)size;
 -(void)putChunk:(NSData *)data;
 -(bool)hasMoreData;
 

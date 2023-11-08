@@ -308,16 +308,16 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
-  public void subscribe(String serviceUuid, String characteristicUuid, Promise promise) {
-    Log.d(NAME, String.format("subscribe(%s, %s)", serviceUuid, characteristicUuid));
+  public void subscribe(String transactionId, String serviceUuid, String characteristicUuid, Promise promise) {
+    Log.d(NAME, String.format("subscribe(%s, %s, %s)", transactionId, serviceUuid, characteristicUuid));
 
     setNotificationEnabled(promise, serviceUuid, characteristicUuid, true);
   }
 
   @ReactMethod
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
-  public void unsubscribe(String serviceUuid, String characteristicUuid, Promise promise) {
-    Log.d(NAME, String.format("unsubscribe(%s, %s)", serviceUuid, characteristicUuid));
+  public void unsubscribe(String transactionId, String serviceUuid, String characteristicUuid, Promise promise) {
+    Log.d(NAME, String.format("unsubscribe(%s, %s, %s)", transactionId, serviceUuid, characteristicUuid));
 
     setNotificationEnabled(promise, serviceUuid, characteristicUuid, false);
   }

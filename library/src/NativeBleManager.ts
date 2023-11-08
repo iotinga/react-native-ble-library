@@ -46,18 +46,15 @@ export class NativeBleManager implements BleManager {
 
       this.subscriptions.push(
         this.nativeInterface.addListener({
-          onConnectionStateChanged: ({ state }) => {
+          onConnectionStateChanged: ({ state, services }) => {
             this.logger?.debug('[BleManager] connection state changed', state)
 
             if (this.device) {
               this.device.connectionState = state
-            }
-          },
-          onServiceDiscovered: ({ services }) => {
-            this.logger?.debug('[BleManager] service discovered')
 
-            if (this.device) {
-              this.device.services = services
+              if (services) {
+                this.device.services = services
+              }
             }
           },
         })
@@ -322,7 +319,7 @@ export class NativeBleManager implements BleManager {
     if (nSubscriptions === 0) {
       this.logger?.info(`[BleManager] execute subscribe(${characteristic})`)
 
-      this.nativeInterface!.subscribe(service, characteristic)
+      this.nativeInterface!.subscribe(this.getTransactionId(), service, characteristic)
         .then(() => {
           this.logger?.info('[BleManager] subscribed to ', characteristic)
           this.nSubscriptions.set(key, nSubscriptions + 1)
@@ -342,7 +339,7 @@ export class NativeBleManager implements BleManager {
 
         const nSubscriptions = this.nSubscriptions.get(key) ?? 0
         if (nSubscriptions === 1) {
-          this.nativeInterface!.unsubscribe(service, characteristic)
+          this.nativeInterface!.unsubscribe(this.getTransactionId(), service, characteristic)
             .then(() => {
               this.logger?.info('[BleManager] unsubscribed from ', characteristic)
               this.nSubscriptions.set(key, 0)

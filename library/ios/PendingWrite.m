@@ -2,8 +2,9 @@
 
 @implementation PendingWrite
 
--(id _Nonnull)init:(NSData *)data chunkSize:(NSUInteger)chunkSize {
-    self = [super init];
+-(id)init:(NSString *)transactionId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+     data:(NSData *)data chunkSize:(NSUInteger)chunkSize {
+    self = [super init:transactionId resolve:resolve reject:reject];
     if (self != nil) {
         self.data = data;
         self.size = data.length;

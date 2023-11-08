@@ -8,7 +8,6 @@ export enum BleNativeEvent {
   CHAR_VALUE_CHANGED = 'CHAR_VALUE_CHANGED',
   PROGRESS = 'PROGRESS',
   CONNECTION_STATE_CHANGED = 'CONNECTION_STATE_CHANGED',
-  SERVICE_DISCOVERED = 'SERVICE_DISCOVERED',
 }
 
 export type BleServicesInfo = {
@@ -28,11 +27,12 @@ export interface IBleNativeEventListener {
   }): void
   onConnectionStateChanged(data: {
     state: ConnectionState
-    error: string | null
+    error: BleErrorCode | null
     message: string
     android?: { status: number }
+    ios?: { code: number; description: string }
+    services?: BleServiceInfo[]
   }): void
-  onServiceDiscovered(data: { services: BleServiceInfo[] }): void
 }
 
 export interface IBleNativeModule {
@@ -44,8 +44,8 @@ export interface IBleNativeModule {
   disconnect(): Promise<void>
   write(transactionId: string, service: string, characteristic: string, value: string, chunkSize: number): Promise<void>
   read(transactionId: string, service: string, characteristic: string, size: number): Promise<string>
-  subscribe(service: string, characteristic: string): Promise<void>
-  unsubscribe(service: string, characteristic: string): Promise<void>
+  subscribe(transactionId: string, service: string, characteristic: string): Promise<void>
+  unsubscribe(transactionId: string, service: string, characteristic: string): Promise<void>
   readRSSI(transactionId: string): Promise<number>
   cancel(transactionId: string): Promise<void>
 }
@@ -118,12 +118,12 @@ export class NativeBleInterface implements INativeBleInterface {
     return wrap(this.logger, 'read', this.nativeModule.read, transactionId, service, characteristic, size)
   }
 
-  subscribe(service: string, characteristic: string): Promise<void> {
-    return wrap(this.logger, 'subscribe', this.nativeModule.subscribe, service, characteristic)
+  subscribe(transactionId: string, service: string, characteristic: string): Promise<void> {
+    return wrap(this.logger, 'subscribe', this.nativeModule.subscribe, transactionId, service, characteristic)
   }
 
-  unsubscribe(service: string, characteristic: string): Promise<void> {
-    return wrap(this.logger, 'unsubscribe', this.nativeModule.unsubscribe, service, characteristic)
+  unsubscribe(transactionId: string, service: string, characteristic: string): Promise<void> {
+    return wrap(this.logger, 'unsubscribe', this.nativeModule.unsubscribe, transactionId, service, characteristic)
   }
 
   readRSSI(transactionId: string): Promise<number> {
@@ -161,11 +161,6 @@ export class NativeBleInterface implements INativeBleInterface {
           BleNativeEvent.CONNECTION_STATE_CHANGED,
           listener.onConnectionStateChanged.bind(listener)
         )
-      )
-    }
-    if (listener.onServiceDiscovered) {
-      subscriptions.push(
-        this.eventEmitter.addListener(BleNativeEvent.SERVICE_DISCOVERED, listener.onServiceDiscovered.bind(listener))
       )
     }
 

@@ -1,22 +1,53 @@
 #import <Foundation/Foundation.h>
 
+#import "PendingRead.h"
+#import "PendingWrite.h"
 #import "BleLibrary.h"
 #import "BleErrorCode.h"
 #import "BleNativeEvent.h"
 #import "ConnectionState.h"
+#import "Transaction.h"
 
 // disable logging in production builds
 #ifndef DEBUG
 #define NSLog(...)
 #endif
 
-static NSTimeInterval CONNECTION_TIMEOUT_SECONDS = 5.0;
+@implementation BleLibrary {
+    CBCentralManager *_manager;
+    CBPeripheral *_peripheral;
 
-@implementation BleLibrary
+    Transaction *_initTransaction;
+    Transaction *_readRssiTransaction;
+    NSMutableDictionary<NSString *, Transaction *> *_transactionById;
+    NSMutableDictionary<NSString *, PendingRead *> *_readOperationByCharUuid;
+    NSMutableDictionary<NSString *, PendingWrite *> *_writeOperationByCharUuid;
+    NSMutableDictionary<NSString *, Transaction *> *_notificationUpdateByCharUuid;
+}
 
 RCT_EXPORT_MODULE()
 
 #pragma mark - RN module interface
+
+-(id)init {
+    self = [super init];
+    if (self != nil) {
+        _manager = nil;
+        _peripheral = nil;
+        _initTransaction = nil;
+        _readRssiTransaction = nil;
+        _transactionById = [[NSMutableDictionary alloc] init];
+        _readOperationByCharUuid = [[NSMutableDictionary alloc] init];
+        _writeOperationByCharUuid = [[NSMutableDictionary alloc] init];
+        _notificationUpdateByCharUuid = [[NSMutableDictionary alloc] init];
+    }
+    return self;
+}
+
+// necessry if you override init!
+-(BOOL)requiresMainQueueSetup {
+    return NO;
+}
 
 // invoked when the first listener is registerd in the JS code
 -(void)startObserving {
@@ -36,7 +67,6 @@ RCT_EXPORT_MODULE()
         EVENT_CHAR_VALUE_CHANGED,
         EVENT_PROGRESS,
         EVENT_CONNECTION_STATE_CHANGED,
-        EVENT_SERVICE_DISCOVERED,
     ];
 }
 
@@ -50,26 +80,32 @@ RCT_EXPORT_MODULE()
 
 #pragma mark - module management
 
+-(void)cancelAllTransactions {
+    for (Transaction *transaction in _transactionById.allValues) {
+        [transaction cancel];
+    }
+    
+    [_transactionById removeAllObjects];
+    [_readOperationByCharUuid removeAllObjects];
+    [_writeOperationByCharUuid removeAllObjects];
+    [_notificationUpdateByCharUuid removeAllObjects];
+    _readRssiTransaction = nil;
+    _initTransaction = nil;
+}
+
 -(void)dispose {
-    if (self.manager != nil) {
-        if (self.timeout) {
-            [self.timeout invalidate];
-            self.timeout = nil;
-        }
-        if ([self hasPendingPromise]) {
-            [self reject:ERROR_GENERIC message:@"module is shutting down" error:nil];
-        }
-        if ([self.manager isScanning]) {
+    if (_manager != nil) {
+        if ([_manager isScanning]) {
             NSLog(@"[BLeLibrary] stopping scan");
-            [self.manager stopScan];
+            [_manager stopScan];
         }
         if (self.isConnected) {
             NSLog(@"[BleLibrary] disconnecting device");
-            [self.manager cancelPeripheralConnection:self.peripheral];
-            self.peripheral = nil;
+            [_manager cancelPeripheralConnection:_peripheral];
+            _peripheral = nil;
         }
     }
-    self.manager = nil;
+    _manager = nil;
 }
 
 RCT_EXPORT_METHOD(initModule:(RCTPromiseResolveBlock)resolve
@@ -77,10 +113,10 @@ RCT_EXPORT_METHOD(initModule:(RCTPromiseResolveBlock)resolve
 {
     NSLog(@"[BleLibrary] initModule()");
 
-    if (self.manager == nil) {
+    if (_manager == nil) {
         NSLog(@"[BleLibrary] init manager");
-        [self setPromise:resolve reject:reject];
-        self.manager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
+        _initTransaction = [[Transaction alloc] init:@"_init" resolve:resolve reject:reject];
+        _manager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
     } else {
         NSLog(@"[BleLibrary] manager already initialized");
         resolve(nil);
@@ -103,44 +139,46 @@ RCT_EXPORT_METHOD(disposeModule:(RCTPromiseResolveBlock)resolve
         case CBManagerStateUnknown:
         case CBManagerStateResetting:
             NSLog(@"[BleLibrary] BLE unsupported or internal error");
-            [self reject:ERROR_INVALID_STATE message:@"invalid state" error:nil];
-            self.manager = nil;
+            [_initTransaction fail:ERROR_INVALID_STATE message:@"invalid state" error:nil];
+            _manager = nil;
             break;
         case CBManagerStateUnsupported:
             NSLog(@"[BleLibrary] BLE unsupported on this device");
-            [self reject:ERROR_BLE_NOT_SUPPORTED message:@"BLE not supported on this device" error:nil];
-            self.manager = nil;
+            [_initTransaction fail:ERROR_BLE_NOT_SUPPORTED message:@"BLE not supported on this device" error:nil];
+            _manager = nil;
             break;
         case CBManagerStateUnauthorized:
             NSLog(@"[BleLibrary] permission missing");
-            [self reject:ERROR_MISSING_PERMISSIONS message:@"missing BLE permissions" error:nil];
-            self.manager = nil;
+            [_initTransaction fail:ERROR_MISSING_PERMISSIONS message:@"missing BLE permissions" error:nil];
+            _manager = nil;
             break;
         case CBManagerStatePoweredOff:
             NSLog(@"[BleLibrary] BLE is turned OFF");
-            [self reject:ERROR_BLE_NOT_ENABLED message:@"BLE is off" error:nil];
-            self.manager = nil;
+            [_initTransaction fail:ERROR_BLE_NOT_ENABLED message:@"BLE is off" error:nil];
+            _manager = nil;
             break;
         case CBManagerStatePoweredOn:
             NSLog(@"[BleLibrary] BLE manager active");
-            [self resolve:nil];
+            [_initTransaction succeed:nil];
             break;
         default:
             NSLog(@"[BleLibrary] invalid state received");
+            [_initTransaction fail:ERROR_INVALID_STATE message:@"invalid state received" error:nil];
+            _manager = nil;
             break;
     }
+    
+    _initTransaction = nil;
 }
 
-RCT_EXPORT_METHOD(cancelPendingOperations:(RCTPromiseResolveBlock)resolve
+RCT_EXPORT_METHOD(cancel:(NSString *)transactionId
+                  resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
-    NSLog(@"[BleLibrary] cancelPendingOperations()");
-
-    [self reject:ErrorOperationCanceled message:@"the current operation was canceled" error:nil];
-
-    self.write = nil;
-    self.read = nil;
-
+    NSLog(@"[BleLibrary] cancel(%@)", transactionId);
+    
+    [_transactionById[transactionId] cancel];
+    
     resolve(nil);
 }
 
@@ -152,13 +190,13 @@ RCT_EXPORT_METHOD(scanStart:(NSArray<NSString *> *)serviceUuids
 {
     NSLog(@"[BleLibrary] scanStart(%@)", serviceUuids);
 
-    if (self.manager == nil) {
+    if (_manager == nil) {
         NSLog(@"[BleLibrary] manager is not initialized");
         reject(ERROR_NOT_INITIALIZED, @"call initModule first", nil);
     } else if (![self isBlePoweredOn]) {
         NSLog(@"[BleLibrary] BLE is not enabled");
         reject(ERROR_BLE_NOT_ENABLED, @"BLE is not enabled", nil);
-    } else if ([self.manager isScanning]) {
+    } else if ([_manager isScanning]) {
         NSLog(@"[BleLibrary] already running");
         resolve(nil);
     } else {
@@ -171,8 +209,7 @@ RCT_EXPORT_METHOD(scanStart:(NSArray<NSString *> *)serviceUuids
                 [services addObject:[CBUUID UUIDWithString:uuid]];
             }
         }
-        NSDictionary<NSString *,id> *options = @{};
-        [self.manager scanForPeripheralsWithServices:services options:options];
+        [_manager scanForPeripheralsWithServices:services options:@{}];
         NSLog(@"[BleLibrary] scan started");
         resolve(nil);
     }
@@ -183,15 +220,15 @@ RCT_EXPORT_METHOD(scanStop:(RCTPromiseResolveBlock)resolve
 {
     NSLog(@"[BleLibrary] scanStop()");
 
-    if (self.manager == nil) {
+    if (_manager == nil) {
         NSLog(@"[BleLibrary] manager is not initialized");
         reject(ERROR_NOT_INITIALIZED, @"call initModule first", nil);
     } else if (![self isBlePoweredOn]) {
         NSLog(@"[BleLibrary] BLE is not enabled");
         reject(ERROR_BLE_NOT_ENABLED, @"BLE is not enabled", nil);
-    } else if (self.manager.isScanning) {
+    } else if (_manager.isScanning) {
         NSLog(@"[BleLibrary] stoping scan");
-        [self.manager stopScan];
+        [_manager stopScan];
         NSLog(@"[BleLibrary] scan stopped");
         resolve(nil);
     } else {
@@ -211,7 +248,7 @@ didDiscoverPeripheral:(CBPeripheral *)peripheral
         @"devices": @[
             @{
                 @"id": peripheral.identifier.UUIDString.lowercaseString,
-                @"name": peripheral.name != nil ? peripheral.name : [NSNull alloc],
+                @"name": peripheral.name != nil ? peripheral.name : [NSNull null],
                 @"rssi": RSSI,
                 @"available": @YES,
             },
@@ -231,36 +268,39 @@ RCT_EXPORT_METHOD(connect:(NSString *)deviceId
 {
     NSLog(@"[BleLibrary] connect(%@, %d)", deviceId, mtu.intValue);
 
-    if (self.manager == nil) {
+    if (_manager == nil) {
         NSLog(@"[BleLibrary] module is not initalized");
         reject(ERROR_NOT_INITIALIZED, @"call initModule first", nil);
     } else if (![self isBlePoweredOn]) {
         NSLog(@"[BleLibrary] BLE is not enabled");
         reject(ERROR_BLE_NOT_ENABLED, @"BLE is not enabled", nil);
     } else {
-        if (self.peripheral) {
+        if ([self isConnected]) {
             NSLog(@"[BleLibrary] a peripherial is already connected. Disconnect it first");
-            [self.manager cancelPeripheralConnection:self.peripheral];
-            self.peripheral = nil;
+            [_manager cancelPeripheralConnection:_peripheral];
         }
+        _peripheral = nil;
+
+        // ensure all transaction are concluded
+        [self cancelAllTransactions];
 
         NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:deviceId];
         if (uuid == nil) {
             NSLog(@"[BleLibrary] invalid UUID");
             reject(ERROR_INVALID_ARGUMENTS, @"the deviceId must be a valid UUID", nil);
         } else {
-            NSArray<CBPeripheral *> *peripherals = [self.manager retrievePeripheralsWithIdentifiers: @[uuid]];
+            NSArray<CBPeripheral *> *peripherals = [_manager retrievePeripheralsWithIdentifiers: @[uuid]];
             if (peripherals.count == 0 || peripherals[0] == nil) {
                 NSLog(@"[BleLibrary] peripheral with UUID %@ not found", uuid);
                 reject(ERROR_INVALID_ARGUMENTS, @"peripheral with such UUID not found", nil);
             } else {
                 // note: it's important to keep a reference for the peripherial, otherwise the manager will
                 // cancel the connection!
-                self.peripheral = peripherals[0];
-                [self.peripheral setDelegate:self];
+                _peripheral = peripherals[0];
+                [_peripheral setDelegate:self];
 
                 NSLog(@"[BleLibrary] requesting connect");
-                [self.manager connectPeripheral:self.peripheral options:nil];
+                [_manager connectPeripheral:_peripheral options:nil];
                 
                 resolve(nil);
             }
@@ -303,15 +343,22 @@ didFailToConnectPeripheral:(CBPeripheral *)peripheral
 // callback that is invoked when the service discovery is complete
 -(void)peripheral:(CBPeripheral *)peripheral
 didDiscoverServices:(NSError *)error {
-    if (error == nil) {
-        NSLog(@"[BleLibrary] service discovery complete");
+    if (error != nil) {
+        NSLog(@"[BleLibrary] error discovering services (error: %@)", error);
 
         [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
-            @"state": STATE_DISCOVERING_SERVICES,
-            @"error": [NSNull null],
-            @"message": @"service discovery ok, starting characteristic discovery",
-            @"ios": @{},
+            @"state": STATE_DISCONNECTING,
+            @"error": ERROR_GATT,
+            @"message": @"service discovery failed",
+            @"ios": @{
+                @"code": @(error.code),
+                @"description": error.description,
+            },
         }];
+        
+        [_manager cancelPeripheralConnection:_peripheral];
+    } else {
+        NSLog(@"[BleLibrary] service discovery complete");
 
         NSArray<CBService *> *services = peripheral.services;
         for (CBService *service in services) {
@@ -320,18 +367,6 @@ didDiscoverServices:(NSError *)error {
         }
 
         NSLog(@"[BleLibrary] service discovery done, now waiting to discover all characteristics");
-    } else {
-        NSLog(@"[BleLibrary] error discovering services (error: %@)", error);
-
-        [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
-            @"state": STATE_DISCONNECTED,
-            @"error": ERROR_GATT,
-            @"message": @"service discovery failed",
-            @"ios": @{
-                @"code": @(error.code),
-                @"description": error.description,
-            },
-        }];
     }
 }
 
@@ -340,14 +375,27 @@ didDiscoverCharacteristicsForService:(nonnull CBService *)service
             error:(nullable NSError *)error {
     if (error != nil) {
         NSLog(@"[BleLibrary] error discovering characteristics for service %@ (error: %@)", service, error);
-        [self reject:ErrorGATT message:@"error discovering characteristics" error:error];
+
+        [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
+            @"state": STATE_DISCONNECTING,
+            @"error": ERROR_GATT,
+            @"message": @"characteristic discovery failed",
+            @"ios": @{
+                @"code": @(error.code),
+                @"description": error.description,
+                @"service": service.UUID.UUIDString,
+            },
+        }];
+        
+        // cancel connection
+        [_manager cancelPeripheralConnection:_peripheral];
     } else {
         NSLog(@"[BleLibrary] discovered characteristics for service %@", service.UUID);
         for (CBCharacteristic *characteristic in service.characteristics) {
             NSLog(@"[BleLibrary] - characteristic %@ properties: %lu", characteristic.UUID, characteristic.properties);
         }
 
-        bool charRemainingToDiscover = NO;
+        BOOL charRemainingToDiscover = NO;
         for (CBService *service in peripheral.services) {
             if (service.characteristics == nil) {
                 charRemainingToDiscover = YES;
@@ -371,9 +419,13 @@ didDiscoverCharacteristicsForService:(nonnull CBService *)service
                     @"isPrimary": @(service.isPrimary),
                 }];
             }
-
-            [self resolve:@{
+            
+            [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
+                @"state": STATE_CONNECTED,
+                @"error": ERROR_GATT,
+                @"message": @"service discovery done",
                 @"services": services,
+                @"ios": @{},
             }];
         } else {
             NSLog(@"[BleLibrary] waiting for another service to complete characteristic discovery");
@@ -387,17 +439,24 @@ RCT_EXPORT_METHOD(disconnect:(RCTPromiseResolveBlock)resolve
 {
     NSLog(@"[BleLibrary] disconnect()");
 
-    if (![self isConnected]) {
-        NSLog(@"[BleLibrary] device not connected");
-        reject(ErrorNotConnected, @"call connect first", nil);
-    } else if ([self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] an async operation is already in progress");
-        reject(ErrorModuleBusy, @"an operation is already in progress", nil);
+    if ([self isConnected]) {
+        NSLog(@"[BleLibrary] canceling connection");
+        
+        // ensure all transaction are concluded
+        [self cancelAllTransactions];
+        
+        [_manager cancelPeripheralConnection:_peripheral];
+        [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
+            @"state": STATE_DISCONNECTING,
+            @"error": [NSNull null],
+            @"message": @"disconnecting from peripherial",
+            @"ios": @{},
+        }];
     } else {
-        NSLog(@"[BleLibrary] disconnecting peripheral %@", self.peripheral);
-        [self setPromise:resolve reject:reject];
-        [self.manager cancelPeripheralConnection:self.peripheral];
+        NSLog(@"[BleLibrary] no peripherial to disconnect");
     }
+    
+    resolve(nil);
 }
 
 -(void)centralManager:(CBCentralManager *)central
@@ -405,51 +464,93 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
                 error:(NSError *)error {
     if (error == nil) {
         NSLog(@"[BleLibrary] disconnected from peripheral %@", peripheral);
-        [self resolve:nil];
+        
+        [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
+            @"state": STATE_DISCONNECTED,
+            @"error": [NSNull null],
+            @"message": @"disconnected from peripherial",
+            @"ios": @{},
+        }];
     } else {
         NSLog(@"[BleLibrary] disconnected from peripheral %@ failed (error: %@)", peripheral, error);
-        NSDictionary *body = @{
-            @"error": ErrorDeviceDisconnected,
-            @"message": @"unexpected device disconnect",
-            @"nativeError": error.description,
-        };
-        [self sendEventWithName:EventError body:body];
-        [self reject:ErrorDeviceDisconnected message:@"BLE device connection lost" error:nil];
+        
+        [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
+            @"state": STATE_DISCONNECTED,
+            @"error": ERROR_GATT,
+            @"message": @"disconnected from peripherial unexpetedly",
+            @"ios": @{
+                @"code": @(error.code),
+                @"description": error.description,
+            },
+        }];
     }
 
-    self.read = nil;
-    self.write = nil;
-    self.peripheral = nil;
+    // in any case we deallocate the resources
+    _peripheral = nil;
 }
 
-RCT_EXPORT_METHOD(readRSSI:(RCTPromiseResolveBlock)resolve
+#pragma mark - read RSSI
+
+RCT_EXPORT_METHOD(readRSSI:(NSString *)transactionId
+                  resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
     if (![self isConnected]) {
         NSLog(@"[BleLibrary] device not connected");
-        reject(ErrorNotConnected, @"call connect first", nil);
-    } else if ([self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] an async operation is already in progress");
-        reject(ErrorModuleBusy, @"an operation is already in progress", nil);
+        reject(ERROR_NOT_CONNECTED, @"call connect first", nil);
     } else {
-        [self setPromise:resolve reject:reject];
-        [self.peripheral readRSSI];
+        // cancel read RSSI transaction if any
+        [_readRssiTransaction cancel];
+        
+        // create new transaction
+        _readRssiTransaction = [[Transaction alloc] init:transactionId resolve:resolve reject:reject];
+        _transactionById[_readRssiTransaction.transactionId] = _readRssiTransaction;
+        
+        [_peripheral readRSSI];
     }
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didReadRSSI:(NSNumber *)RSSI error:(NSError *)error {
-    if (error == nil) {
-        NSLog(@"[BleLibrary] read RSSI success, RSSI = %@", RSSI);
-        [self resolve:RSSI];
+    if (_readRssiTransaction == nil) {
+        NSLog(@"[BleLibrary] read RSSI callback received but no transaction is in progress!");
     } else {
-        NSLog(@"[BleLibrary] read RSSI error (error: %@)", error);
-        [self reject:ErrorGATT message:@"read RSSI failed" error:error];
+        if (error == nil) {
+            NSLog(@"[BleLibrary] read RSSI success, RSSI = %@", RSSI);
+            [_readRssiTransaction succeed:RSSI];
+        } else {
+            NSLog(@"[BleLibrary] read RSSI error (error: %@)", error);
+            [_readRssiTransaction fail:ERROR_GATT message:error.description error:error];
+        }
+        
+        [_transactionById removeObjectForKey:_readRssiTransaction.transactionId];
+        _readRssiTransaction = nil;
     }
 }
 
 #pragma mark - BLE write
 
-RCT_EXPORT_METHOD(write:(NSString *)serviceUuid
+-(void)cancelPendingTransactionForChar:(NSString *)charUuid {
+    Transaction *pendingRead = _readOperationByCharUuid[charUuid];
+    if (pendingRead != nil) {
+        NSLog(@"[BleLibrary] warning: a read for the characteristic was already in progress. Cancel it.");
+        [pendingRead fail:ERROR_OPERATION_CANCELED message:@"canceled since another operation on the same char is requested" error:nil];
+        
+        [_readOperationByCharUuid removeObjectForKey:charUuid];
+        [_transactionById removeObjectForKey:pendingRead.transactionId];
+    }
+    
+    Transaction *pendingWrite = _writeOperationByCharUuid[charUuid];
+    if (pendingWrite != nil) {
+        NSLog(@"[BleLibrary] warning: a write for the characteristic was already in progress. Cancel it.");
+        [pendingWrite fail:ERROR_OPERATION_CANCELED message:@"canceled since another operation on the same char is requested" error:nil];
+        
+        [_writeOperationByCharUuid removeObjectForKey:charUuid];
+        [_transactionById removeObjectForKey:pendingWrite.transactionId];
+    }
+}
+
+RCT_EXPORT_METHOD(write:(NSString *)transactionId
+                  serviceUuid:(NSString *)serviceUuid
                   characteristic:(NSString *)characteristicUuid
                   value:(NSString *)value
                   chunkSize:(NSNumber *_Nonnull)chunkSize
@@ -460,24 +561,27 @@ RCT_EXPORT_METHOD(write:(NSString *)serviceUuid
 
     if (![self isConnected]) {
         NSLog(@"[BleLibrary] device not connected");
-        reject(ErrorNotConnected, @"call connect first", nil);
-    } else if ([self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] an async operation is already in progress");
-        reject(ErrorModuleBusy, @"an operation is already in progress", nil);
+        reject(ERROR_NOT_CONNECTED, @"call connect first", nil);
     } else {
         CBCharacteristic *characteristic = [self findCharacteristic:characteristicUuid forService:serviceUuid];
         if (characteristic == nil) {
             NSLog(@"[BleLibrary] service %@ characteristic %@ not found", serviceUuid, characteristicUuid);
-            reject(ErrorInvalidArguments, @"characteristic not found on device", nil);
+            reject(ERROR_INVALID_ARGUMENTS, @"characteristic not found on device", nil);
         } else {
             NSData *data = [[NSData alloc] initWithBase64EncodedString:value options:0];
             NSLog(@"[BleLibrary] requesting write for %lu bytes", data.length);
+            
+            [self cancelPendingTransactionForChar:characteristicUuid];
+            
+            PendingWrite *write = [[PendingWrite alloc] init:transactionId resolve:resolve reject:reject
+                                                        data:data chunkSize:chunkSize.unsignedIntValue];
 
-            self.write = [[PendingWrite alloc] init:data chunkSize:chunkSize.unsignedIntValue];
+            // store transaction pending
+            _transactionById[transactionId] = write;
+            _writeOperationByCharUuid[characteristicUuid] = write;
 
             // waiting for callback didWriteValueForCharacteristic
-            [self setPromise:resolve reject:reject];
-            [self.peripheral writeValue:[self.write getChunk] forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+            [_peripheral writeValue:[write getChunk] forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
         }
     }
 }
@@ -486,35 +590,45 @@ RCT_EXPORT_METHOD(write:(NSString *)serviceUuid
 -(void)peripheral:(CBPeripheral *)peripheral
 didWriteValueForCharacteristic:(CBCharacteristic *)characteristic
             error:(NSError *)error {
-    if (error == nil && self.write != nil) {
+    NSString *charUuid = characteristic.UUID.UUIDString;
+    PendingWrite *write = _writeOperationByCharUuid[charUuid];
+    if (write == nil || write.isCompleted) {
+        NSLog(@"[BleLibrary] transaction for char %@ nil or completed!", characteristic);
+    } else if (error == nil) {
         NSLog(@"[BleLibrary] write value success");
-        if ([self.write hasMoreChunks]) {
-            NSLog(@"[BleLibrary] write another chunk of data (%lu/%lu)", self.write.size, self.write.written);
-            NSDictionary *data = @{
-                @"characteristic": characteristic.UUID.UUIDString.lowercaseString,
-                @"service": characteristic.service.UUID.UUIDString.lowercaseString,
-                @"current": [NSNumber numberWithUnsignedInt:self.write.written],
-                @"total": [NSNumber numberWithUnsignedInt:self.write.size],
-            };
-            [self sendEventWithName:EventWriteProgress body:data];
+        if ([write hasMoreChunks]) {
+            NSLog(@"[BleLibrary] write another chunk of data (%lu/%lu)", write.size, write.written);
 
-            [peripheral writeValue:[self.write getChunk] forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+            [self sendEventWithName:EVENT_PROGRESS body:@{
+                @"characteristic": charUuid.lowercaseString,
+                @"service": characteristic.service.UUID.UUIDString.lowercaseString,
+                @"current": @(write.written),
+                @"total": @(write.size),
+                @"transactionId": write.transactionId,
+            }];
+
+            [peripheral writeValue:[write getChunk] forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
         } else {
             NSLog(@"[BleLibrary] write is completed! Resolving Promise");
 
-            [self resolve:nil];
-            self.write = nil;
+            [write succeed:write.data];
+            
+            [_transactionById removeObjectForKey:write.transactionId];
+            [_writeOperationByCharUuid removeObjectForKey:write.transactionId];
         }
     } else {
         NSLog(@"[BleLibrary] write value failue (error: %@)", error);
-        self.write = nil;
-        [self reject:ErrorGATT message:@"error writing characteristic" error:error];
+        [write fail:ERROR_GATT message:error.description error:error];
+        
+        [_transactionById removeObjectForKey:write.transactionId];
+        [_writeOperationByCharUuid removeObjectForKey:write.transactionId];
     }
 }
 
 #pragma mark - BLE read
 
-RCT_EXPORT_METHOD(read:(NSString *)serviceUuid
+RCT_EXPORT_METHOD(read:(NSString *)transactionId
+                  serviceUuid:(NSString *)serviceUuid
                   characteristic:(NSString *)characteristicUuid
                   size:(NSNumber *_Nonnull)size
                   resolve:(RCTPromiseResolveBlock)resolve
@@ -524,22 +638,27 @@ RCT_EXPORT_METHOD(read:(NSString *)serviceUuid
 
     if (![self isConnected]) {
         NSLog(@"[BleLibrary] device not connected");
-        reject(ErrorNotConnected, @"call connect first", nil);
-    } else if ([self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] an async operation is already in progress");
-        reject(ErrorModuleBusy, @"an operation is already in progress", nil);
+        reject(ERROR_NOT_CONNECTED, @"call connect first", nil);
     } else {
         CBCharacteristic *characteristic = [self findCharacteristic:characteristicUuid forService:serviceUuid];
         if (characteristic == nil) {
             NSLog(@"[BleLibrary] service %@ characteristic %@ not found", serviceUuid, characteristicUuid);
-            reject(ErrorInvalidArguments, @"characteristic not found on device", nil);
+            reject(ERROR_INVALID_ARGUMENTS, @"characteristic not found on device", nil);
         } else {
             NSLog(@"[BleLibrary] requesting read for characteristic");
 
-            self.read = [[PendingRead alloc] init:size.unsignedIntValue characteristic:characteristic];
+            // cancel existing read or write for the same characteristic
+            [self cancelPendingTransactionForChar:characteristicUuid];
 
-            [self setPromise:resolve reject:reject];
-            [self.peripheral readValueForCharacteristic:characteristic];
+            PendingRead *read = [[PendingRead alloc] init:transactionId resolve:resolve reject:reject
+                                                     size:size.unsignedIntValue];
+
+            // store transaction pending
+            _transactionById[read.transactionId] = read;
+            _readOperationByCharUuid[characteristicUuid] = read;
+
+            // perform write
+            [_peripheral readValueForCharacteristic:characteristic];
         }
     }
 }
@@ -550,46 +669,56 @@ RCT_EXPORT_METHOD(read:(NSString *)serviceUuid
 -(void)peripheral:(CBPeripheral *)peripheral
 didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
             error:(NSError *)error {
+    NSString *charUuid = characteristic.UUID.UUIDString;
+    PendingRead *read = _readOperationByCharUuid[charUuid];
+    
     if (error != nil) {
         NSLog(@"[BleLibrary] read value failure (error: %@)", error);
-        self.read = nil;
-        [self reject:ErrorGATT message:@"error reading characteristic" error:error];
-    } else if (self.read != nil && [self.read.characteristic isEqual:characteristic]) {
+                
+        [read fail:ERROR_GATT message:@"error reading characteristic" error:error];
+        
+        // remove characteristic from pending operation list
+        [_transactionById removeObjectForKey:read.transactionId];
+        [_readOperationByCharUuid removeObjectForKey:charUuid];
+    } else if (read != nil) {
         NSLog(@"[BleLibrary] read progress for characteristic %@", characteristic);
 
-        [self.read putChunk:[characteristic value]];
-        if ([self.read hasMoreData]) {
-            NSLog(@"[BleLibrary] need to receive more data (%ld/%ld) for characteristic, notify JS", (long)self.read.read, (long)self.read.size);
+        [read putChunk:[characteristic value]];
+        if ([read hasMoreData]) {
+            NSLog(@"[BleLibrary] need to receive more data (%ld/%ld) for characteristic, notify JS", read.read, read.size);
 
-            NSDictionary *data = @{
+            [self sendEventWithName:EVENT_PROGRESS body: @{
                 @"characteristic": characteristic.UUID.UUIDString.lowercaseString,
                 @"service": characteristic.service.UUID.UUIDString.lowercaseString,
-                @"current": [NSNumber numberWithUnsignedInt:self.read.read],
-                @"total": [NSNumber numberWithUnsignedInt:self.read.size],
-            };
-            [self sendEventWithName:EventReadProgress body:data];
+                @"current": @(read.read),
+                @"total": @(read.size),
+                @"transactionId": read.transactionId,
+            }];
 
             NSLog(@"[BleLibrary] triggering another read, and waiting for didUpdateValueForCharacteristic");
             [peripheral readValueForCharacteristic:characteristic];
         } else {
             NSLog(@"[BleLibrary] read is complete! Resolving Promise");
-            [self resolve:[self.read.data base64EncodedStringWithOptions:0]];
-            self.read = nil;
+            [read succeed:[read.data base64EncodedStringWithOptions:0]];
+            
+            // remove characteristic from pending operation list
+            [_transactionById removeObjectForKey:read.transactionId];
+            [_readOperationByCharUuid removeObjectForKey:charUuid];
         }
     } else {
         NSLog(@"[BleLibrary] subscription updated characteristic %@, notify JS", characteristic);
-        NSDictionary *data = @{
+        [self sendEventWithName:EVENT_CHAR_VALUE_CHANGED body:@{
             @"value": [characteristic.value base64EncodedStringWithOptions:0],
             @"characteristic": characteristic.UUID.UUIDString.lowercaseString,
             @"service": characteristic.service.UUID.UUIDString.lowercaseString,
-        };
-        [self sendEventWithName:EventCharValueChanged body:data];
+        }];
     }
 }
 
 #pragma mark - BLE notification managment
 
-RCT_EXPORT_METHOD(subscribe:(NSString *)serviceUuid
+RCT_EXPORT_METHOD(subscribe:(NSString *)transactionId
+                  stringUuid:(NSString *)serviceUuid
                   characteristic:(NSString *)characteristicUuid
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
@@ -598,27 +727,37 @@ RCT_EXPORT_METHOD(subscribe:(NSString *)serviceUuid
 
     if (![self isConnected]) {
         NSLog(@"[BleLibrary] device not connected");
-        reject(ErrorNotConnected, @"call connect first", nil);
-    } else if ([self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] an async operation is already in progress");
-        reject(ErrorModuleBusy, @"an operation is already in progress", nil);
+        reject(ERROR_NOT_CONNECTED, @"call connect first", nil);
     } else {
         CBCharacteristic *characteristic = [self findCharacteristic:characteristicUuid forService:serviceUuid];
         if (characteristic == nil) {
             NSLog(@"[BleLibrary] service %@ characteristic %@ not found", serviceUuid, characteristicUuid);
-            reject(ErrorInvalidArguments, @"characteristic not found on device", nil);
+            reject(ERROR_INVALID_ARGUMENTS, @"characteristic not found on device", nil);
         } else if (characteristic.isNotifying) {
             NSLog(@"[BleLibrary] notifications are already enabled");
             resolve(nil);
         } else {
             NSLog(@"[BleLibrary] waiting for callback didUpdateNotificationStateForCharacteristic");
-            [self setPromise:resolve reject:reject];
-            [self.peripheral setNotifyValue:YES forCharacteristic:characteristic];
+            NSString *charUuid = characteristic.UUID.UUIDString;
+            
+            Transaction *transaction = _notificationUpdateByCharUuid[charUuid];
+            if (transaction != nil) {
+                [transaction fail:ERROR_INVALID_STATE message:@"another notification change operation is in progress" error:nil];
+                [_transactionById removeObjectForKey:transaction.transactionId];
+            }
+            
+            // cancel eventual operation in progress
+            transaction = [[Transaction alloc] init:transactionId resolve:resolve reject:reject];
+            _notificationUpdateByCharUuid[charUuid] = transaction;
+            _transactionById[transactionId] = transaction;
+            
+            [_peripheral setNotifyValue:YES forCharacteristic:characteristic];
         }
     }
 }
 
-RCT_EXPORT_METHOD(unsubscribe:(NSString *)serviceUuid
+RCT_EXPORT_METHOD(unsubscribe:(NSString *)transactionId
+                  serviceUuid:(NSString *)serviceUuid
                   characteristic:(NSString *)characteristicUuid
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
@@ -627,22 +766,31 @@ RCT_EXPORT_METHOD(unsubscribe:(NSString *)serviceUuid
 
     if (![self isConnected]) {
         NSLog(@"[BleLibrary] device not connected");
-        reject(ErrorNotConnected, @"call connect first", nil);
-    } else if ([self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] an async operation is already in progress");
-        reject(ErrorModuleBusy, @"an operation is already in progress", nil);
+        reject(ERROR_NOT_CONNECTED, @"call connect first", nil);
     } else {
         CBCharacteristic *characteristic = [self findCharacteristic:characteristicUuid forService:serviceUuid];
         if (characteristic == nil) {
             NSLog(@"[BleLibrary] service %@ characteristic %@ not found", serviceUuid, characteristicUuid);
-            reject(ErrorInvalidArguments, @"characteristic not found on device", nil);
+            reject(ERROR_INVALID_ARGUMENTS, @"characteristic not found on device", nil);
         } else if (!characteristic.isNotifying) {
             NSLog(@"[BleLibrary] notifications are already disabled");
             resolve(nil);
         } else {
             NSLog(@"[BleLibrary] waiting for callback didUpdateNotificationStateForCharacteristic");
-            [self setPromise:resolve reject:reject];
-            [self.peripheral setNotifyValue:NO forCharacteristic:characteristic];
+            NSString *charUuid = characteristic.UUID.UUIDString;
+
+            Transaction *transaction = _notificationUpdateByCharUuid[charUuid];
+            if (transaction != nil) {
+                [transaction fail:ERROR_INVALID_STATE message:@"another notification change operation is in progress" error:nil];
+                [_transactionById removeObjectForKey:transaction.transactionId];
+            }
+            
+            // cancel eventual operation in progress
+            transaction = [[Transaction alloc] init:transactionId resolve:resolve reject:reject];
+            _notificationUpdateByCharUuid[charUuid] = transaction;
+            _transactionById[transactionId] = transaction;
+
+            [_peripheral setNotifyValue:NO forCharacteristic:characteristic];
         }
     }
 }
@@ -651,23 +799,34 @@ RCT_EXPORT_METHOD(unsubscribe:(NSString *)serviceUuid
 -(void)peripheral:(CBPeripheral *)peripheral
 didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
             error:(NSError *)error {
-    if (error == nil) {
-        NSLog(@"[BleLibrary] characteristic %@ notification state updated", characteristic);
-        [self resolve:nil];
+    NSString *charUuid = characteristic.UUID.UUIDString;
+    Transaction *transaction = _notificationUpdateByCharUuid[charUuid];
+    
+    if (transaction == nil || transaction.isCompleted) {
+        NSLog(@"[BleLibrary] subscribe/unsubscribe callback received by transaction was canceled!");
     } else {
-        NSLog(@"[BleLibrary] characteristic %@ notification state update (error: %@)", characteristic, error);
-        [self reject:ErrorGATT message:@"Error setting notification state" error:error];
+        if (error == nil) {
+            NSLog(@"[BleLibrary] characteristic %@ notification state updated", characteristic);
+            [transaction succeed:nil];
+        } else {
+            NSLog(@"[BleLibrary] characteristic %@ notification state update (error: %@)", characteristic, error);
+            [transaction fail:ERROR_GATT message:@"error setting notification" error:error];
+        }
+        
+        [_notificationUpdateByCharUuid removeObjectForKey:charUuid];
+        [_transactionById removeObjectForKey:transaction.transactionId];
     }
+    
 }
 
 #pragma mark - utility
 
 -(CBCharacteristic *_Nullable)findCharacteristic:(NSString *)characteristicUuid forService:(NSString *)serviceUuid {
-    if (self.peripheral == nil) {
+    if (_peripheral == nil) {
         return nil;
     }
 
-    NSArray<CBService *> *services = [self.peripheral services];
+    NSArray<CBService *> *services = [_peripheral services];
     if (services == nil) {
         return nil;
     }
@@ -678,64 +837,24 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
             }
             for (CBCharacteristic *characteristic in service.characteristics) {
                 if ([characteristic.UUID.UUIDString isEqualToString:characteristicUuid.uppercaseString]) {
+                    
                     return characteristic;
                 }
             }
         }
     }
-
+    
     return nil;
-}
-
-// resolves the promise that is pending (if there is one)
--(void)resolve:(NSObject *)data {
-    if ([self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] resolving promise with %@", data);
-        self.resolve(data);
-
-        self.resolve = nil;
-        self.reject = nil;
-    } else {
-        NSLog(@"[BleLibrary] error: no pending promise set");
-    }
-}
-
-// rejects the promise that is pending (if there is one)
--(void)reject:(NSString *)code message:(NSString *)message error:(NSError *)error {
-    if ([self hasPendingPromise]) {
-        NSLog(@"[BleLibrary] rejecting promise with code:%@ message:%@ error:%@", code, message, error);
-        self.reject(code, message, error);
-
-        self.resolve = nil;
-        self.reject = nil;
-    } else {
-        NSLog(@"[BleLibrary] error: no pending promise set");
-    }
-}
-
-// sets a promise pending
--(void)setPromise:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
-    if ([self hasPendingPromise]) {
-        reject(ErrorModuleBusy, @"an async operation is already in progress!", nil);
-    } else {
-        self.resolve = resolve;
-        self.reject = reject;
-    }
-}
-
-// returns true if there is a pending promise
--(bool)hasPendingPromise {
-    return self.reject != nil || self.resolve != nil;
 }
 
 // true if a device is connected to the module
 -(bool)isConnected {
-    return self.peripheral != nil && self.peripheral.state == CBPeripheralStateConnected;
+    return _peripheral != nil && _peripheral.state == CBPeripheralStateConnected;
 }
 
 // true if the manager is initialized
 -(bool)isBlePoweredOn {
-    return self.manager != nil && self.manager.state == CBManagerStatePoweredOn;
+    return _manager != nil && _manager.state == CBManagerStatePoweredOn;
 }
 
 @end

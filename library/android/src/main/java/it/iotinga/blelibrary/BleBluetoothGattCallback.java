@@ -110,8 +110,7 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     if (status == BluetoothGatt.GATT_SUCCESS) {
       Log.i(TAG, "service discovery success. The device is now ready to be used");
 
-      eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.CONNECTED, RNEventConnectionStateChanged.SUCCESS));
-      eventEmitter.emit(new RNEventServiceDiscovered(gatt.getServices()));
+      eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.CONNECTED, RNEventConnectionStateChanged.SUCCESS, gatt.getServices()));
     } else {
       Log.w(TAG, "error discovering services. Try to reset the connection with the device");
 
@@ -135,6 +134,8 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
         gattTransaction.onError(status);
       }
     }
+
+    executor.process();
   }
 
   @Override
@@ -150,6 +151,8 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
         gattTransaction.onError(status);
       }
     }
+
+    executor.process();
   }
 
   @Override
@@ -172,5 +175,7 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
         gattTransaction.onError(status);
       }
     }
+
+    executor.process();
   }
 }
