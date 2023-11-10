@@ -96,7 +96,16 @@ export class NativeBleManager implements BleManager {
     this.ensureInitialized()
 
     const subscription = this.nativeInterface!.addListener({
-      onScanResult: (data) => onDiscover(data.devices),
+      onScanResult: (data) => {
+        onDiscover(
+          data.devices.map((d) => ({
+            ...d,
+            // ensure boolean are mapped correctly (for iOS)
+            isConnectable: Boolean(d.isConnectable),
+            isAvailable: Boolean(d.isAvailable),
+          }))
+        )
+      },
       onError: (data) => {
         this.logger?.error('[BleManager] scan error', data)
 
@@ -138,7 +147,7 @@ export class NativeBleManager implements BleManager {
     }
   }
 
-  async connect(id: string, mtu?: number): Promise<BleConnectedDeviceInfo> {
+  async connect(id: string, mtu?: number): Promise<void> {
     this.ensureInitialized()
 
     this.logger?.info(`[BleManager] execute connect(${id}, ${mtu})`)
@@ -156,8 +165,6 @@ export class NativeBleManager implements BleManager {
         connectionState: ConnectionState.CONNECTING_TO_DEVICE,
       }
       this.nSubscriptions.clear()
-
-      return this.connectedDevice
     } catch (e: any) {
       this.connectedDevice = null
 

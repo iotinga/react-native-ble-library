@@ -4,29 +4,28 @@ const uint8_t EOF_BYTE = 0xff;
 
 @implementation PendingRead
 
--(id _Nonnull)init:(NSString *)transactionId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
-              size:(NSUInteger)size {
+- (instancetype)init:(NSString *)transactionId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject size:(NSUInteger)size {
     self = [super init:transactionId resolve:resolve reject:reject];
     if (self != nil) {
-        self.size = size;
-        self.read = 0;
-        self.data = [[NSMutableData alloc] init];
+        _size = size;
+        _read = 0;
+        _data = [[NSMutableData alloc] init];
     }
     return self;
 }
 
--(void)putChunk:(NSData * _Nonnull)data {
+- (void)putChunk:(nonnull NSData *)data {
     uint8_t byte = 0;
-    if (self.data.length == 1 && ([self.data getBytes:&byte length:1], byte == EOF_BYTE)) {
+    if (_data.length == 1 && ([_data getBytes:&byte length:1], byte == EOF_BYTE)) {
       // EOF reached, ignore the rest of the data
-      self.size = self.data.length;
+        _size = _data.length;
     } else {
-      [self.data appendData:data];
+        [_data appendData:data];
     }
 }
 
--(bool)hasMoreData {
-    return self.size > 0 && self.size < self.data.length;
+- (BOOL)hasMoreData {
+    return _size > 0 && _size < _data.length;
 }
 
 @end

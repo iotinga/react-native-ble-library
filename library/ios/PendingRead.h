@@ -6,14 +6,26 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface PendingRead : Transaction
-@property NSUInteger size;
-@property NSUInteger read;
-@property(strong) NSMutableData *data;
 
--(id)init:(NSString *)transactionId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+/// total bytes to read from the device
+@property(readonly) NSUInteger size;
+
+/// bytes currently read from the device and available in data
+@property(readonly) NSUInteger read;
+
+/// data read from the device
+@property(strong, readonly, nonatomic) NSMutableData *data;
+
+/// true if more data needs to be received from the device
+@property(readonly, getter=hasMoreData) BOOL hasMoreData;
+
+- (instancetype)init:(NSString *)transactionId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
      size:(NSUInteger)size;
--(void)putChunk:(NSData *)data;
--(bool)hasMoreData;
+
+/// put a new chunk of data, obtained from a read
+///
+/// @param data to add to the read data
+- (void)putChunk:(NSData *)data;
 
 @end
 

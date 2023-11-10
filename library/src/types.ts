@@ -12,7 +12,13 @@ export type BleDeviceInfo = {
   rssi: number
 
   /** true if the device is available, false if device is no longer available (Android only) */
-  available: boolean
+  isAvailable: boolean
+
+  /** true if the device is connectable */
+  isConnectable: boolean
+
+  /** tx power of the device */
+  txPower: number
 }
 
 export enum ConnectionState {
@@ -69,10 +75,11 @@ export type BleConnectedDeviceInfo = {
 
 export interface BleManager {
   /**
-   * Needs to be called to initialize the BLE manager.
-   * This does trigger the permission request on iOS/Android.
-   * On iOS this method will fail if the BLE is not enabled, while on Android it
-   * will try to enable it automatically (and rejects if it is not possible).
+   * Initializes the BLE stack:
+   * - checks if the BLE is supported by the device
+   * - checks if the user has the required permissions, asking to grant them if necessary
+   * - checks if Bluetooth is enabled (on Android asks for activation if disabled)
+   * - allocates all the necessary resources needed for the scan
    *
    * @throws {BleError} in case of an error
    */
@@ -81,14 +88,14 @@ export interface BleManager {
   /**
    * Start a BLE scan for the devices that expose the specified services.
    *
-   * @param serviceUuids if not null returns only the devices that expose one of the specified services
+   * @param serviceUuids the service UUID to scan for
    * @param onDiscover callback invoked each time a new devices are discovered
    * @param onError a callback that gets invoked when a scan error occurs
    * @returns a subscription for the scan operation
    * @throws {BleError} in case of an error
    */
   scan(
-    serviceUuid: string[] | null | undefined,
+    serviceUuid: string[],
     onDiscover: (devices: BleDeviceInfo[]) => void,
     onError?: (error: BleError) => void
   ): Subscription
@@ -107,10 +114,9 @@ export interface BleManager {
    * @param id id of the device to connect to. Should correspond to one device found in a previous scan!
    * @param mtu the MTU to set to the device when connecting. This is only relevant on Android,
    *  since on iOS the MTU is negotiated automatically. If not specified uses the default from the BLE driver.
-   * @return info of the connected device
    * @throws {BleError} in case of an error
    */
-  connect(id: string, mtu?: number): Promise<BleConnectedDeviceInfo>
+  connect(id: string, mtu?: number): Promise<void>
 
   /**
    * Set a callback to be invoked each time the device connection information changes

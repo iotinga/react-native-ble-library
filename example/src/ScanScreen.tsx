@@ -6,12 +6,14 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { RootStackParamList } from './Navigation'
 import { useBleScan } from './hooks/useBleScan'
 
+const FILTER_UUID = ['D19299C3-DEC3-04BE-07D4-14651FF6B6A4']
+
 export function ScanScreen() {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>()
-  const [devices, error] = useBleScan()
+  const [devices, error] = useBleScan(FILTER_UUID)
 
   return (
-    <SafeAreaView edges={['bottom']}>
+    <SafeAreaView edges={['bottom']} style={{ flex: 1 }}>
       <Text style={{ margin: 15, fontSize: 18, textAlign: 'center' }}>
         {devices.length === 0 ? 'Scanning for BLE devices...' : `Found ${devices.length} devices`}
       </Text>
@@ -21,7 +23,7 @@ export function ScanScreen() {
         </Text>
       )}
       <FlatList
-        style={{ height: '100%', paddingHorizontal: 15 }}
+        style={{ flex: 1, paddingHorizontal: 15 }}
         data={devices}
         renderItem={({ item }) => (
           <>

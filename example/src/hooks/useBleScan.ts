@@ -11,11 +11,16 @@ export function useBleScan(serviceUuids?: string[]): [BleDeviceInfo[], BleError 
 
   useEffect(() => {
     const onResults = (results: BleDeviceInfo[]) => {
+      if (results.every(r => !r.isConnectable)) {
+        console.log('skip non-connectable devices', results)
+        return
+      }
+
       setDevices((oldDevices) => {
         const currentDevices = new Map(oldDevices.map((device) => [device.id, device]))
 
         for (const newDevice of results) {
-          if (newDevice.available) {
+          if (newDevice.isAvailable && newDevice.isConnectable) {
             currentDevices.set(newDevice.id, newDevice)
           } else {
             currentDevices.delete(newDevice.id)

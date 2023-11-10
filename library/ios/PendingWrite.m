@@ -2,36 +2,40 @@
 
 @implementation PendingWrite
 
--(id)init:(NSString *)transactionId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+- (instancetype)init:(NSString *)transactionId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
      data:(NSData *)data chunkSize:(NSUInteger)chunkSize {
     self = [super init:transactionId resolve:resolve reject:reject];
     if (self != nil) {
-        self.data = data;
-        self.size = data.length;
-        self.written = 0;
-        self.chunkSize = chunkSize;
+        _data = data;
+        _size = data.length;
+        _written = 0;
+        _chunkSize = chunkSize;
     }
     return self;
 }
 
--(bool)hasMoreChunks {
-    return self.written < self.size;
+- (BOOL)hasMoreChunks {
+    return _written < _size;
 }
 
--(NSData * _Nonnull)getChunk {
-    NSRange range = {
-        .location = self.written,
-        .length = self.chunkSize,
-    };
-    
-    NSUInteger remainingLength = self.size - self.written;
-    if (range.length > remainingLength) {
-        range.length = remainingLength;
+- (nullable NSData *)getChunk {
+    if (!self.hasMoreChunks) {
+        return nil;
+    } else {
+        NSRange range = {
+            .location = _written,
+            .length = _chunkSize,
+        };
+        
+        NSUInteger remainingLength = _size - _written;
+        if (range.length > remainingLength) {
+            range.length = remainingLength;
+        }
+        
+        _written += range.length;
+        
+        return [_data subdataWithRange:range];
     }
-    
-    self.written += range.length;
-
-    return [self.data subdataWithRange:range];
 }
 
 @end

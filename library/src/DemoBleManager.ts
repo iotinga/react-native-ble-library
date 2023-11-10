@@ -10,12 +10,17 @@ import {
 
 export class DemoBleManager implements BleManager {
   private values = new Map<string, Buffer>()
+  private connectionStateChangeSubscriptions = new Set<(state: ConnectionState, error: BleError | null) => void>()
 
   constructor(private demoState: DemoState) {}
 
   onConnectionStateChanged(callback: (state: ConnectionState, error: BleError | null) => void): Subscription {
+    this.connectionStateChangeSubscriptions.add(callback)
+
     return {
-      unsubscribe: () => {},
+      unsubscribe: () => {
+        this.connectionStateChangeSubscriptions.delete(callback)
+      },
     }
   }
 
@@ -27,50 +32,40 @@ export class DemoBleManager implements BleManager {
     }
   }
 
-  scan(
-    serviceUuid: string[] | null | undefined,
-    callback: (devices: BleDeviceInfo[]) => void,
-    onError?: ((error: BleError) => void) | undefined
-  ): Subscription {
-    for (const device of this.demoState.devices) {
-      callback([device])
-    }
+  scan(serviceUuid: string[] | null | undefined, callback: (devices: BleDeviceInfo[]) => void): Subscription {
+    let i = 0
+    const interval = setTimeout(() => {
+      callback([this.demoState.devices[i]!])
+
+      i = (i + 1) % this.demoState.devices.length
+    }, 500)
 
     return {
-      unsubscribe: () => {},
+      unsubscribe: () => {
+        clearInterval(interval)
+      },
     }
   }
 
-  async connect(
-    id: string,
-    mtu?: number | undefined,
-    onError?: ((error: BleError) => void) | undefined
-  ): Promise<BleConnectedDeviceInfo> {
-    return this.device
+  async connect(id: string, mtu?: number | undefined): Promise<void> {
+    setTimeout(() => {
+      for (const subscription of this.connectionStateChangeSubscriptions) {
+        subscription(ConnectionState.CONNECTED, null)
+      }
+    }, 2000)
   }
 
   async disconnect(): Promise<void> {}
 
-  async read(
-    service: string,
-    characteristic: string,
-    size?: number | undefined,
-    progress?: ((current: number, total: number) => void) | undefined
-  ): Promise<Buffer> {
+  async read(service: string, characteristic: string): Promise<Buffer> {
     return this.values.get(service + characteristic) ?? Buffer.alloc(0)
   }
 
-  async write(
-    service: string,
-    characteristic: string,
-    value: Buffer,
-    chunkSize?: number | undefined,
-    progress?: ((current: number, total: number) => void) | undefined
-  ): Promise<void> {
+  async write(service: string, characteristic: string, value: Buffer): Promise<void> {
     this.values.set(service + characteristic, value)
   }
 
-  subscribe(service: string, characteristic: string, callback: (value: Buffer) => void): Subscription {
+  subscribe(): Subscription {
     return {
       unsubscribe: () => {},
     }

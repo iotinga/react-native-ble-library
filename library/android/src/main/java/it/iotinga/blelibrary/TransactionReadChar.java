@@ -86,7 +86,7 @@ public class TransactionReadChar extends GattTransaction {
   public void start() {
     super.start();
 
-    BluetoothGattCharacteristic characteristic = getCharacteristic(gatt, serviceUuid, charUuid);
+    BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, charUuid);
     if (characteristic == null) {
       Log.w(TAG, "the characteristic to be read is not found");
 

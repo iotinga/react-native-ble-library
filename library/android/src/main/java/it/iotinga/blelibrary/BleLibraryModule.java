@@ -147,7 +147,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
         .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
         .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE);
 
-      if (filterUuid.size() > 0) {
+      if (filterUuid != null && filterUuid.size() > 0) {
         settings.setCallbackType(ScanSettings.CALLBACK_TYPE_FIRST_MATCH | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
         filters = new ArrayList<>();
         for (int i = 0; i < filterUuid.size(); i++) {

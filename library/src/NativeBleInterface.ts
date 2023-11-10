@@ -135,7 +135,7 @@ export class NativeBleInterface implements INativeBleInterface {
   }
 
   addListener(listener: Partial<IBleNativeEventListener>): Subscription {
-    this.logger?.debug('[NativeBleInterface] adding listeners')
+    this.logger?.debug('[NativeBleInterface] adding listeners', Object.keys(listener))
 
     const subscriptions: EmitterSubscription[] = []
 
@@ -166,7 +166,7 @@ export class NativeBleInterface implements INativeBleInterface {
 
     return {
       unsubscribe: () => {
-        this.logger?.debug('[NativeBleInterface] removing listeners')
+        this.logger?.debug('[NativeBleInterface] removing listeners', Object.keys(listener))
 
         for (const subscription of subscriptions) {
           subscription.remove()
