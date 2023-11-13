@@ -5,6 +5,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 
 import java.util.LinkedList;
+import java.util.Objects;
 import java.util.Queue;
 
 public class TransactionQueueExecutor implements TransactionExecutor {
@@ -49,7 +50,7 @@ public class TransactionQueueExecutor implements TransactionExecutor {
   @Override
   public void cancel(String id) {
     for (Transaction t : queue) {
-      if (t.id() == id) {
+      if (Objects.equals(t.id(), id)) {
         Log.i(TAG, "canceling transaction with id " + id);
 
         t.cancel();
