@@ -1,6 +1,5 @@
 import { NativeEventEmitter, NativeModules } from 'react-native'
 import { BleError, BleErrorCode } from './BleError'
-import type { CancelationToken } from './CancelationToken'
 import { NativeBleInterface, type INativeBleInterface } from './NativeBleInterface'
 import {
   ConnectionState,
@@ -191,7 +190,7 @@ export class NativeBleManager implements BleManager {
     characteristic: string,
     size?: number,
     progress?: (current: number, total: number) => void,
-    cancelToken?: CancelationToken
+    abortSignal?: AbortSignal
   ): Promise<Buffer> {
     this.logger?.info(`[BleManager] execute read(${service}, ${characteristic}, ${size})`)
 
@@ -199,30 +198,26 @@ export class NativeBleManager implements BleManager {
     characteristic = characteristic.toLowerCase()
 
     const transactionId = this.getTransactionId()
-    const subscriptions: Subscription[] = []
 
-    if (cancelToken !== undefined) {
-      subscriptions.push(
-        cancelToken.addListener(() => {
-          this.logger?.info(`[BleManager] canceling read(${service}, ${characteristic}, ${size})`)
+    const onAbort = () => {
+      this.logger?.info(`[BleManager] canceling read(${service}, ${characteristic}, ${size})`)
 
-          this.nativeInterface!.cancel(transactionId)
-        })
-      )
+      this.nativeInterface!.cancel(transactionId)
     }
 
-    if (progress !== undefined) {
-      subscriptions.push(
-        this.nativeInterface!.addListener({
-          onProgress: (data) => {
-            if (data.transactionId === transactionId) {
-              this.logger?.info('[BleManager] read progress', data)
+    abortSignal?.addEventListener('abort', onAbort)
 
-              progress(data.current, data.total)
-            }
-          },
-        })
-      )
+    let progressSubscription: Subscription | undefined
+    if (progress !== undefined) {
+      progressSubscription = this.nativeInterface!.addListener({
+        onProgress: (data) => {
+          if (data.transactionId === transactionId) {
+            this.logger?.info('[BleManager] read progress', data)
+
+            progress(data.current, data.total)
+          }
+        },
+      })
     }
 
     let result: string
@@ -231,9 +226,8 @@ export class NativeBleManager implements BleManager {
     } catch (e: any) {
       throw new BleError(e.code, e.message)
     } finally {
-      for (const subscription of subscriptions) {
-        subscription.unsubscribe()
-      }
+      abortSignal?.removeEventListener('abort', onAbort)
+      progressSubscription?.unsubscribe()
     }
 
     return Buffer.from(result, 'base64')
@@ -245,7 +239,7 @@ export class NativeBleManager implements BleManager {
     value: Buffer,
     chunkSize = MAX_BLE_CHAR_SIZE,
     progress?: (current: number, total: number) => void,
-    cancelToken?: CancelationToken
+    abortSignal?: AbortSignal
   ): Promise<void> {
     this.ensureInitialized()
 
@@ -259,34 +253,30 @@ export class NativeBleManager implements BleManager {
     )
 
     const transactionId = this.getTransactionId()
-    const subscriptions: Subscription[] = []
-
-    if (cancelToken !== undefined) {
-      subscriptions.push(
-        cancelToken.addListener(() => {
-          this.logger?.info(
-            `[BleManager] canceling write(${characteristic}, ${value.subarray(0, 50).toString('base64')} (len: ${
-              value.length
-            }))`
-          )
-
-          this.nativeInterface!.cancel(transactionId)
-        })
+    const onAbort = () => {
+      this.logger?.info(
+        `[BleManager] canceling write(${characteristic}, ${value.subarray(0, 50).toString('base64')} (len: ${
+          value.length
+        }))`
       )
+
+      this.nativeInterface!.cancel(transactionId)
     }
 
-    if (progress !== undefined) {
-      subscriptions.push(
-        this.nativeInterface!.addListener({
-          onProgress: (data) => {
-            if (data.transactionId === transactionId) {
-              this.logger?.info('[BleManager] write progress', data)
+    abortSignal?.addEventListener('abort', onAbort)
 
-              progress(data.current, data.total)
-            }
-          },
-        })
-      )
+    let progressSubscription: Subscription | undefined
+
+    if (progress !== undefined) {
+      progressSubscription = this.nativeInterface!.addListener({
+        onProgress: (data) => {
+          if (data.transactionId === transactionId) {
+            this.logger?.info('[BleManager] write progress', data)
+
+            progress(data.current, data.total)
+          }
+        },
+      })
     }
 
     try {
@@ -294,9 +284,8 @@ export class NativeBleManager implements BleManager {
     } catch (e: any) {
       throw new BleError(e.code, e.message)
     } finally {
-      for (const subscription of subscriptions) {
-        subscription.unsubscribe()
-      }
+      abortSignal?.removeEventListener('abort', onAbort)
+      progressSubscription?.unsubscribe()
     }
   }
 

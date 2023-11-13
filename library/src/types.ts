@@ -1,5 +1,4 @@
 import type { BleError } from './BleError'
-import type { CancelationToken } from './CancelationToken'
 
 export type BleDeviceInfo = {
   /** ID of the device. On Android this is a MAC address, on iOS it's an opaque UUID */
@@ -148,7 +147,7 @@ export interface BleManager {
    * @param characteristic UUID of the characteristic to read
    * @param size if specified read repeatedly till size bytes are received
    * @param progress callback to report the read progress to the application
-   * @param cancelToken param that allows to cancel a long async read
+   * @param abortSignal param that allows to cancel a long async read
    * @returns a promise that resolves with the read value
    * @throws {BleError} in case of an error
    */
@@ -157,7 +156,7 @@ export interface BleManager {
     characteristic: string,
     size?: number,
     progress?: (current: number, total: number) => void,
-    cancelToken?: CancelationToken
+    abortSignal?: AbortSignal
   ): Promise<Buffer>
 
   /**
@@ -173,7 +172,7 @@ export interface BleManager {
    * @param chunkSize if specified write at most chunkSize bytes at a time. If length of the data is
    *  greater than chunk size it will perform multiple writes till all the data is written. Default: 512 bytes
    * @param progress callback to report the write progress to the application
-   * @param cancelToken param that allows to cancel a long async write
+   * @param abortSignal param that allows to cancel a long async write
    * @throws {BleError} in case of an error
    */
   write(
@@ -182,7 +181,7 @@ export interface BleManager {
     value: Buffer,
     chunkSize?: number,
     progress?: (current: number, total: number) => void,
-    cancelToken?: CancelationToken
+    abortSignal?: AbortSignal
   ): Promise<void>
 
   /**
