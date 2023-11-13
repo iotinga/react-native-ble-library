@@ -1,5 +1,4 @@
-import { BleError } from '../lib/typescript/src'
-import type { BleErrorCode } from './BleError'
+import { BleError, BleErrorCode } from './BleError'
 
 export function isBleError(error: unknown): error is BleError {
   return error instanceof BleError
