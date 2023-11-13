@@ -31,6 +31,7 @@ public class BlePermissionsManager implements PermissionManager, PermissionListe
       this.permissions.add(Manifest.permission.BLUETOOTH_SCAN);
     } else {
       this.permissions.add(Manifest.permission.BLUETOOTH);
+      this.permissions.add(Manifest.permission.BLUETOOTH_ADMIN);
       this.permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
     }
   }
