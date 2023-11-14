@@ -115,7 +115,11 @@ return data
 npm install @iotinga/react-native-ble-library
 ```
 
+The library should link automatically both in plain React Native and Expo.
+
 ### Usage
 
 Refer to the JSDoc of the BleManager interface to know how to use the module, and look
 at the code in the `example/` directory!
+
+
