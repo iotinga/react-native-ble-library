@@ -335,10 +335,10 @@ export class NativeBleManager implements BleManager {
 
         const nSubscriptions = this.nSubscriptions.get(key) ?? 0
         if (nSubscriptions === 1) {
+          this.nSubscriptions.set(key, 0)
           this.nativeInterface!.unsubscribe(this.getTransactionId(), service, characteristic)
             .then(() => {
               this.logger?.info('[BleManager] unsubscribed from ', characteristic)
-              this.nSubscriptions.set(key, 0)
             })
             .catch((e) => {
               this.logger?.error('[BleManager] error unsubscribing from ', characteristic)
