@@ -31,9 +31,7 @@ To do so using Expo, add this key in `app.json` (and run `expo prebuild` if in a
 ```json
 {
   "expo": {
-    // ...
     "ios": {
-      // ...
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "This app needs Bluetooth to scan and connect to BLE devices"
       },
@@ -52,6 +50,7 @@ For Android version >= 12 (API level 31) these permissions are required:
 
 Otherwise for older Android versions these permissions are required:
 - BLUETOOTH
+- BLUETOOTH_ADMIN
 - ACCESS_FINE_LOCATION
 
 You just have to ensure these permissions are not explicitly blocked in your application manifest (if you didn't do
@@ -76,7 +75,7 @@ as a rock.
 #### Repeated write
 
 Simply call the `write()` function. If the length of the data you are writing is greater than the chunk size (default: 512 bytes)
-then the write is split into multiple reads with this algorithm:
+then the write is split into multiple reads with this algorithm in pseudo-code:
 
 ```js
 while (written < data.length) {
@@ -95,6 +94,7 @@ Simply call the `read()` function passing a `size` parameter. The read is repeat
 - `size` bytes are not received by a char read returns a data of length 1 with the byte `0xff`
 - an error occurs
 
+See the following pseudo-code
 ```js
 while (data.length < size) {
   chunk = read()
