@@ -60,9 +60,9 @@ RCT_EXPORT_MODULE()
 
 #pragma mark - module management
 
-- (void)cancelAllTransactions {
+- (void)cancelAllTransactions:(NSString *)code message:(NSString *)message error:(nullable NSError *)error {
     for (Transaction *transaction in _transactionById.allValues) {
-        [transaction cancel];
+        [transaction fail:code message:message error:error];
     }
     
     [_transactionById removeAllObjects];
@@ -73,8 +73,9 @@ RCT_EXPORT_MODULE()
     _initTransaction = nil;
 }
 
+
 - (void)dispose {
-    [self cancelAllTransactions];
+    [self cancelAllTransactions:ERROR_NOT_INITIALIZED message:@"BLE manager disposed" error:nil];
     
     if (_manager != nil) {
         if ([_manager isScanning]) {
@@ -275,7 +276,7 @@ RCT_EXPORT_METHOD(connect:(NSString *)deviceId
         _peripheral = nil;
 
         // ensure all transaction are concluded
-        [self cancelAllTransactions];
+        [self cancelAllTransactions:ERROR_OPERATION_CANCELED message:@"starting new connection" error:nil];
 
         NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:deviceId];
         if (uuid == nil) {
@@ -436,7 +437,7 @@ RCT_EXPORT_METHOD(disconnect:(RCTPromiseResolveBlock)resolve
         NSLog(@"[BleLibrary] canceling connection");
         
         // ensure all transaction are concluded
-        [self cancelAllTransactions];
+        [self cancelAllTransactions:ERROR_NOT_CONNECTED message:@"disconnecting device" error:nil];
         
         [_manager cancelPeripheralConnection:_peripheral];
         [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
@@ -457,7 +458,7 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
                 error:(NSError *)error {
     if (error == nil) {
         NSLog(@"[BleLibrary] disconnected from peripheral %@", peripheral);
-        
+                
         [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
             @"state": STATE_DISCONNECTED,
             @"error": [NSNull null],
@@ -465,10 +466,10 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
             @"ios": @{},
         }];
     } else {
-        NSLog(@"[BleLibrary] disconnected from peripheral %@ failed (error: %@)", peripheral, error);
+        NSLog(@"[BleLibrary] disconnected from peripheral %@ failed (error: %@). Trigger new connection", peripheral, error);
         
         [self sendEventWithName:EVENT_CONNECTION_STATE_CHANGED body:@{
-            @"state": STATE_DISCONNECTED,
+            @"state": STATE_CONNECTING_TO_DEVICE,
             @"error": ERROR_GATT,
             @"message": @"disconnected from peripherial unexpetedly",
             @"ios": @{
@@ -476,8 +477,14 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
                 @"description": error.description,
             },
         }];
+        
+        // trigger a new connection to peripherial
+        [_manager connectPeripheral:_peripheral options:nil];
     }
 
+    // on disconnect all operations pending should fail!
+    [self cancelAllTransactions:ERROR_NOT_CONNECTED message:@"device has disconnected" error:nil];
+    
     // in any case we deallocate the resources
     _peripheral = nil;
 }

@@ -12,5 +12,5 @@ public interface TransactionExecutor {
 
   void cancel(String id);
 
-  void flush();
+  void flush(BleError error, String message);
 }

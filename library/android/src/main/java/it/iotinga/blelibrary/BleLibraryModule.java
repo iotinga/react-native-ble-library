@@ -101,7 +101,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   public void disposeModule(Promise promise) {
     Log.d(NAME, "disposeModule()");
 
-    executor.flush();
+    executor.flush(BleError.ERROR_NOT_INITIALIZED, "module disposed");
 
     if (context.gatt != null) {
       context.gatt.close();
@@ -219,7 +219,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     }
 
     // ensure transaction queue is empty
-    executor.flush();
+    executor.flush(BleError.ERROR_NOT_CONNECTED, "a new connection is starting");
 
     BluetoothDevice device;
     try {
@@ -249,7 +249,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   public void disconnect(Promise promise) {
     Log.d(NAME, "disconnect()");
 
-    executor.flush();
+    executor.flush(BleError.ERROR_NOT_CONNECTED, "disconnecting device");
 
     if (context.gatt != null) {
       context.gatt.disconnect();

@@ -62,6 +62,9 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     if (status != BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
       Log.w(TAG, "connection failed unexpectedly. Trigger a new connection to device");
 
+      // cancel all pending transaction
+      executor.flush(BleError.ERROR_NOT_CONNECTED, "device has disconnected (unexpectedly)");
+
       boolean success = gatt.connect();
       if (success) {
         eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.CONNECTING_TO_DEVICE, status));
@@ -74,6 +77,9 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
 
     if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
       Log.w(TAG, "expected disconnection");
+
+      // cancel all pending transaction
+      executor.flush(BleError.ERROR_NOT_CONNECTED, "device has disconnected (expectedly)");
 
       eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.DISCONNECTED, status));
     }

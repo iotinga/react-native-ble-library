@@ -59,11 +59,11 @@ public class TransactionQueueExecutor implements TransactionExecutor {
   }
 
   @Override
-  public void flush() {
+  public void flush(BleError error, String message) {
     Log.i(TAG, "flushing pending transaction queue");
 
     for (Transaction transaction : queue) {
-      transaction.cancel();
+      transaction.fail(error, message);
     }
 
     queue.clear();
