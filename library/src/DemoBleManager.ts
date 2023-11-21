@@ -34,7 +34,7 @@ export class DemoBleManager implements BleManager {
 
   scan(serviceUuid: string[] | null | undefined, callback: (devices: BleDeviceInfo[]) => void): Subscription {
     let i = 0
-    const interval = setTimeout(() => {
+    const interval = setInterval(() => {
       callback([this.demoState.devices[i]!])
 
       i = (i + 1) % this.demoState.devices.length
