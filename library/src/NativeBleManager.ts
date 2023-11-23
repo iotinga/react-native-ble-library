@@ -16,13 +16,21 @@ const MAX_BLE_CHAR_SIZE = 512
 export class NativeBleManager implements BleManager {
   private subscriptions: Subscription[] = []
 
-  private nativeInterface: INativeBleInterface | null = null
+  private readonly nativeInterface: INativeBleInterface
   private initialized = false
   private connectedDevice: BleConnectedDeviceInfo | null = null
 
   private nSubscriptions = new Map<string, number>()
 
-  constructor(private readonly logger?: ILogger) {}
+  constructor(private readonly logger?: ILogger) {
+    const nativeModule = NativeModules.BleLibrary
+    if (nativeModule === undefined) {
+      throw new Error(`Ble native module not found. Ensure to link the library correctly!`)
+    }
+
+    const nativeEventEmitter = new NativeEventEmitter(nativeModule)
+    this.nativeInterface = new NativeBleInterface(nativeModule, nativeEventEmitter, this.logger)
+  }
 
   private getTransactionId() {
     return `${Date.now()}-${Math.random()}`
@@ -36,13 +44,6 @@ export class NativeBleManager implements BleManager {
 
   async init(): Promise<void> {
     if (!this.initialized) {
-      const nativeModule = NativeModules.BleLibrary
-      if (nativeModule === undefined) {
-        throw new Error(`Ble native module not found. Ensure to link the library correctly!`)
-      }
-      const nativeEventEmitter = new NativeEventEmitter(nativeModule)
-      this.nativeInterface = new NativeBleInterface(nativeModule, nativeEventEmitter, this.logger)
-
       this.subscriptions.push(
         this.nativeInterface.addListener({
           onConnectionStateChanged: ({ state, services }) => {
@@ -373,8 +374,7 @@ export class NativeBleManager implements BleManager {
 
     if (this.initialized) {
       this.logger?.info('[BleManager] terminating manager')
-      this.nativeInterface!.disposeModule()
-      this.nativeInterface = null
+      this.nativeInterface.disposeModule()
       this.initialized = false
       this.connectedDevice = null
       this.nSubscriptions.clear()
