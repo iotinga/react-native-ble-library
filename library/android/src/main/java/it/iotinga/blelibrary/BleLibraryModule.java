@@ -253,6 +253,8 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
     if (context.gatt != null) {
       context.gatt.disconnect();
+      context.gatt.close();
+      context.gatt = null;
     }
 
     promise.resolve(null);
