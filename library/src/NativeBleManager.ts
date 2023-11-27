@@ -75,8 +75,6 @@ export class NativeBleManager implements BleManager {
   }
 
   onConnectionStateChanged(callback: (state: ConnectionState, error: BleError | null) => void): Subscription {
-    this.ensureInitialized()
-
     return this.nativeInterface!.addListener({
       onConnectionStateChanged: ({ state, error, message }) => {
         if (error) {
