@@ -167,12 +167,21 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
         scanCallback = new BleScanCallback(emitter);
       } else {
         // stopping existing scan to restart it
-        scanner.stopScan(scanCallback);
+        try {
+          scanner.stopScan(scanCallback);
+        } catch (Exception e) {
+          Log.w(NAME, "error stopping scan: " + e.getMessage() + ". Ignoring and continuing anyway");
+        }
       }
 
-      scanner.startScan(filters, settings.build(), scanCallback);
+      try {
+        scanner.startScan(filters, settings.build(), scanCallback);
 
-      promise.resolve(null);
+        promise.resolve(null);
+      } catch (Exception e) {
+        Log.e(NAME, "error starting scan: " + e.getMessage());
+        promise.reject(BleError.ERROR_SCAN.name(), "error starting scan: " + e.getMessage(), e);
+      }
     }
   }
 
@@ -182,7 +191,12 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     Log.d(NAME, "scanStop()");
 
     if (scanner != null) {
-      scanner.stopScan(scanCallback);
+      try {
+        scanner.stopScan(scanCallback);
+      } catch (Exception e) {
+        Log.w(NAME, "error stopping scan, error: " + e.getMessage());
+        // ignore error here, this is expected to fail in case BLE is turned off
+      }
       scanner = null;
       scanCallback = null;
     }
@@ -195,53 +209,58 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   public void connect(String id, Double mtu, Promise promise) {
     Log.d(NAME, String.format("connect(%s, %f)", id, mtu));
 
-    // ensure scan is not active (can create problems on some devices)
-    if (scanner != null) {
-      Log.i(NAME, "stopping BLE scan");
-
-      try {
-        scanner.stopScan(scanCallback);
-        scanner = null;
-        scanCallback = null;
-      } catch (Exception e) {
-        Log.w(NAME, "failed stopping scan: " + e);
-      }
-    }
-
-    // the documentation says that we must do this
-    adapter.cancelDiscovery();
-
-    if (context.gatt != null) {
-      Log.i(NAME, "closing existing GATT instance");
-
-      context.gatt.close();
-      context.gatt = null;
-    }
-
-    // ensure transaction queue is empty
-    executor.flush(BleError.ERROR_NOT_CONNECTED, "a new connection is starting");
-
-    BluetoothDevice device;
     try {
-      device = adapter.getRemoteDevice(id);
+      // ensure scan is not active (can create problems on some devices)
+      if (scanner != null) {
+        Log.i(NAME, "stopping BLE scan");
+
+        try {
+          scanner.stopScan(scanCallback);
+          scanner = null;
+          scanCallback = null;
+        } catch (Exception e) {
+          Log.w(NAME, "failed stopping scan: " + e);
+        }
+      }
+
+      // the documentation says that we must do this
+      adapter.cancelDiscovery();
+
+      if (context.gatt != null) {
+        Log.i(NAME, "closing existing GATT instance");
+
+        context.gatt.close();
+        context.gatt = null;
+      }
+
+      // ensure transaction queue is empty
+      executor.flush(BleError.ERROR_NOT_CONNECTED, "a new connection is starting");
+
+      BluetoothDevice device;
+      try {
+        device = adapter.getRemoteDevice(id);
+      } catch (Exception e) {
+        Log.e(NAME, "cannot find device with address " + id);
+
+        promise.reject(BleError.ERROR_DEVICE_NOT_FOUND.name(), "the specified device was not found");
+        return;
+      }
+
+
+      Log.d(NAME, "starting GATT connection");
+      context.mtu = mtu.intValue();
+      gattCallback = new BleBluetoothGattCallback(emitter, context, executor);
+      context.gatt = device.connectGatt(getReactApplicationContext(), false, gattCallback);
+      if (context.gatt == null) {
+        promise.reject(BleError.ERROR_GATT.name(), "gatt instance is null");
+      }
+
+      // signals that the connection request is taking progress
+      promise.resolve(null);
     } catch (Exception e) {
-      Log.e(NAME, "cannot find device with address " + id);
-
-      promise.reject(BleError.ERROR_DEVICE_NOT_FOUND.name(), "the specified device was not found");
-      return;
+      promise.reject(BleError.ERROR_GATT.name(), "unhandled exception: " + e.getMessage(), e);
+      Log.e(NAME, "unhandled exception: " + e.getMessage());
     }
-
-
-    Log.d(NAME, "starting GATT connection");
-    context.mtu = mtu.intValue();
-    gattCallback = new BleBluetoothGattCallback(emitter, context, executor);
-    context.gatt = device.connectGatt(getReactApplicationContext(), false,  gattCallback);
-    if (context.gatt == null) {
-      promise.reject(BleError.ERROR_GATT.name(), "gatt instance is null");
-    }
-
-    // signals that the connection request is taking progress
-    promise.resolve(null);
   }
 
   @ReactMethod
@@ -252,8 +271,16 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     executor.flush(BleError.ERROR_NOT_CONNECTED, "disconnecting device");
 
     if (context.gatt != null) {
-      context.gatt.disconnect();
-      context.gatt.close();
+      try {
+        context.gatt.disconnect();
+      } catch (Exception e) {
+        Log.w(NAME, "disconnect failed. Continuing anyway, error: " + e.getMessage());
+      }
+      try {
+        context.gatt.close();
+      } catch (Exception e) {
+        Log.w(NAME, "gatt close failed. Continuing anyway, error: " + e.getMessage());
+      }
       context.gatt = null;
     }
 
@@ -291,20 +318,25 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   private void setNotificationEnabled(Promise promise, String serviceUuid, String characteristicUuid, boolean enabled) {
-    if (context.gatt == null) {
-      promise.reject(BleError.ERROR_NOT_CONNECTED.name(), "device is not connected");
-    } else {
-      BluetoothGattCharacteristic characteristic = GattTransaction.getCharacteristic(context.gatt, serviceUuid, characteristicUuid);
-      if (characteristic == null) {
-        promise.reject(BleError.ERROR_INVALID_ARGUMENTS.name(), "characteristic is not found");
+    try {
+      if (context.gatt == null) {
+        promise.reject(BleError.ERROR_NOT_CONNECTED.name(), "device is not connected");
       } else {
-        boolean success = context.gatt.setCharacteristicNotification(characteristic, enabled);
-        if (success) {
-          promise.resolve(null);
+        BluetoothGattCharacteristic characteristic = GattTransaction.getCharacteristic(context.gatt, serviceUuid, characteristicUuid);
+        if (characteristic == null) {
+          promise.reject(BleError.ERROR_INVALID_ARGUMENTS.name(), "characteristic is not found");
         } else {
-          promise.reject(BleError.ERROR_GATT.name(), "error setting characteristic notification");
+          boolean success = context.gatt.setCharacteristicNotification(characteristic, enabled);
+          if (success) {
+            promise.resolve(null);
+          } else {
+            promise.reject(BleError.ERROR_GATT.name(), "error setting characteristic notification");
+          }
         }
       }
+    } catch (Exception e) {
+      Log.e(NAME, "unhandled exception: " + e.getMessage());
+      promise.reject(BleError.ERROR_GENERIC.name(), "unhandled exception: " + e.getMessage(), e);
     }
   }
 

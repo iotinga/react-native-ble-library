@@ -42,7 +42,12 @@ public class TransactionQueueExecutor implements TransactionExecutor {
         queue.remove();
       } else if (top.state() == TransactionState.PENDING) {
         Log.i(TAG, "start transaction " + top.id());
-        top.start();
+        try {
+          top.start();
+        } catch (Exception e) {
+          Log.w(TAG, "unhandled exception while starting transaction: " + e.getMessage());
+          top.fail(BleError.ERROR_GENERIC, "unhandled exception: " + e.getMessage());
+        }
       }
     }
   }
