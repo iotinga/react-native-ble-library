@@ -8,8 +8,8 @@ const uint8_t EOF_BYTE = 0xff;
     self = [super init:transactionId resolve:resolve reject:reject];
     if (self != nil) {
         _size = size;
-        _read = 0;
         _data = [[NSMutableData alloc] init];
+        _hasMoreData = YES;
     }
     return self;
 }
@@ -17,15 +17,16 @@ const uint8_t EOF_BYTE = 0xff;
 - (void)putChunk:(nonnull NSData *)data {
     uint8_t byte = 0;
     if (_data.length == 1 && ([_data getBytes:&byte length:1], byte == EOF_BYTE)) {
-      // EOF reached, ignore the rest of the data
-        _size = _data.length;
+        // EOF reached
+        _hasMoreData = NO;
     } else {
         [_data appendData:data];
+        _hasMoreData = self.read < self.size;
     }
 }
 
-- (BOOL)hasMoreData {
-    return _size > 0 && _size < _data.length;
+- (NSUInteger)read {
+    return _data.length;
 }
 
 @end

@@ -11,13 +11,13 @@ NS_ASSUME_NONNULL_BEGIN
 @property(readonly) NSUInteger size;
 
 /// bytes currently read from the device and available in data
-@property(readonly) NSUInteger read;
+@property(readonly, getter=read) NSUInteger read;
 
 /// data read from the device
 @property(strong, readonly, nonatomic) NSMutableData *data;
 
 /// true if more data needs to be received from the device
-@property(readonly, getter=hasMoreData) BOOL hasMoreData;
+@property(readonly) BOOL hasMoreData;
 
 - (instancetype)init:(NSString *)transactionId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
      size:(NSUInteger)size;

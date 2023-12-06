@@ -8,6 +8,7 @@ import androidx.annotation.RequiresPermission;
 
 import com.facebook.react.bridge.Promise;
 
+import java.util.Arrays;
 import java.util.Base64;
 
 public class TransactionReadChar extends GattTransaction {
@@ -17,9 +18,13 @@ public class TransactionReadChar extends GattTransaction {
   private final Base64.Encoder b64Encoder = Base64.getEncoder();
   private final String serviceUuid;
   private final String charUuid;
+  /** total bytes received from device */
   private int receivedBytes = 0;
+  /** number of bytes to receive. 0 if size is unknown, in this case receive only 1 chunk */
   private int totalSize;
   private byte[] data;
+  /** true if there is more data to receive from the device */
+  private boolean hasMoreChunks = true;
 
 
   TransactionReadChar(String transactionId, Promise promise, EventEmitter emitter, BluetoothGatt gatt, String serviceUuid, String charUuid, int totalSize) {
@@ -32,20 +37,17 @@ public class TransactionReadChar extends GattTransaction {
     }
   }
 
-  private boolean hasMoreChunks() {
-    return receivedBytes < totalSize;
-  }
-
   private void onChunk(byte[] bytes) {
     if (data != null) {
       if (data.length == 1 && data[0] == EOF_BYTE) {
         Log.i(TAG, "read a message of 1 byte 0xff: reached EOF");
 
-        this.totalSize = data.length;
+        hasMoreChunks = false;
       } else {
         for (byte b : bytes) {
           data[receivedBytes++] = b;
         }
+        hasMoreChunks = receivedBytes < totalSize;
       }
     } else {
       data = bytes;
@@ -68,7 +70,7 @@ public class TransactionReadChar extends GattTransaction {
   void onCharRead(BluetoothGattCharacteristic characteristic) {
     onChunk(characteristic.getValue());
 
-    if (hasMoreChunks()) {
+    if (hasMoreChunks) {
       Log.i(TAG, "need to read another chunk of data");
 
       emitter.emit(new RNEventProgress(id(), characteristic, receivedBytes, totalSize));
@@ -77,7 +79,7 @@ public class TransactionReadChar extends GattTransaction {
     } else {
       Log.i(TAG, "all data read :)");
 
-      succeed(b64Encoder.encodeToString(data));
+      succeed(b64Encoder.encodeToString(Arrays.copyOf(data, receivedBytes)));
     }
   }
 
