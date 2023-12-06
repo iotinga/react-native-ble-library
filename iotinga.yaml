@@ -6,7 +6,7 @@ prepare:
   - shell:
       cwd: library
       command: npm version $IOTINGA_VERSION
-  - shell: git push
+  - shell: git commit -am "[CI] bump version to $IOTINGA_VERSION" && git push
     continue-on-error: true
 
 artifacts:
