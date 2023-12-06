@@ -9,7 +9,7 @@ import {
 } from './types'
 
 export class DemoBleManager implements BleManager {
-  private values = new Map<string, Buffer>()
+  private values = new Map<string, Uint8Array>()
   private connectionStateChangeSubscriptions = new Set<(state: ConnectionState, error: BleError | null) => void>()
 
   constructor(private demoState: DemoState) {}
@@ -57,11 +57,11 @@ export class DemoBleManager implements BleManager {
 
   async disconnect(): Promise<void> {}
 
-  async read(service: string, characteristic: string): Promise<Buffer> {
-    return this.values.get(service + characteristic) ?? Buffer.alloc(0)
+  async read(service: string, characteristic: string): Promise<Uint8Array> {
+    return this.values.get(service + characteristic) ?? Uint8Array.from([])
   }
 
-  async write(service: string, characteristic: string, value: Buffer): Promise<void> {
+  async write(service: string, characteristic: string, value: Uint8Array): Promise<void> {
     this.values.set(service + characteristic, value)
   }
 

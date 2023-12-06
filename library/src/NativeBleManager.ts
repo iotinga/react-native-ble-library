@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer'
 import { NativeEventEmitter, NativeModules } from 'react-native'
 import { BleError, BleErrorCode } from './BleError'
 import { NativeBleInterface, type INativeBleInterface } from './NativeBleInterface'
@@ -190,7 +191,7 @@ export class NativeBleManager implements BleManager {
     size?: number,
     progress?: (current: number, total: number) => void,
     abortSignal?: AbortSignal
-  ): Promise<Buffer> {
+  ): Promise<Uint8Array> {
     this.logger?.info(`[BleManager] execute read(${service}, ${characteristic}, ${size})`)
 
     service = service.toLowerCase()
@@ -229,13 +230,13 @@ export class NativeBleManager implements BleManager {
       progressSubscription?.unsubscribe()
     }
 
-    return Buffer.from(result, 'base64')
+    return Uint8Array.from(Buffer.from(result, 'base64'))
   }
 
   async write(
     service: string,
     characteristic: string,
-    value: Buffer,
+    value: Uint8Array,
     chunkSize = MAX_BLE_CHAR_SIZE,
     progress?: (current: number, total: number) => void,
     abortSignal?: AbortSignal
@@ -246,7 +247,7 @@ export class NativeBleManager implements BleManager {
     characteristic = characteristic.toLowerCase()
 
     this.logger?.info(
-      `[BleManager] execute write(${characteristic}, ${value.subarray(0, 50).toString('base64')} (len: ${
+      `[BleManager] execute write(${characteristic}, ${Buffer.from(value.subarray(0, 50)).toString('base64')} (len: ${
         value.length
       }))`
     )
@@ -254,9 +255,9 @@ export class NativeBleManager implements BleManager {
     const transactionId = this.getTransactionId()
     const onAbort = () => {
       this.logger?.info(
-        `[BleManager] canceling write(${characteristic}, ${value.subarray(0, 50).toString('base64')} (len: ${
-          value.length
-        }))`
+        `[BleManager] canceling write(${characteristic}, ${Buffer.from(value.subarray(0, 50)).toString(
+          'base64'
+        )} (len: ${value.length}))`
       )
 
       this.nativeInterface!.cancel(transactionId)
@@ -279,7 +280,13 @@ export class NativeBleManager implements BleManager {
     }
 
     try {
-      await this.nativeInterface!.write(transactionId, service, characteristic, value.toString('base64'), chunkSize)
+      await this.nativeInterface!.write(
+        transactionId,
+        service,
+        characteristic,
+        Buffer.from(value).toString('base64'),
+        chunkSize
+      )
     } catch (e: any) {
       throw new BleError(e.code, e.message)
     } finally {
@@ -291,7 +298,7 @@ export class NativeBleManager implements BleManager {
   subscribe(
     service: string,
     characteristic: string,
-    callback: (value: Buffer) => void,
+    callback: (value: Uint8Array) => void,
     onError?: (error: BleError) => void
   ): Subscription {
     service = service.toLowerCase()
@@ -304,7 +311,7 @@ export class NativeBleManager implements BleManager {
         if (data.characteristic === characteristic && data.service === service) {
           this.logger?.info('[BleManager] char value changed', data)
 
-          callback(Buffer.from(data.value, 'base64'))
+          callback(Uint8Array.from(Buffer.from(data.value, 'base64')))
         }
       },
     })
@@ -332,8 +339,8 @@ export class NativeBleManager implements BleManager {
       unsubscribe: () => {
         subscription.unsubscribe()
 
-        const nSubscriptions = this.nSubscriptions.get(key) ?? 0
-        if (nSubscriptions === 1) {
+        const nSub = this.nSubscriptions.get(key) ?? 0
+        if (nSub === 1) {
           this.nSubscriptions.set(key, 0)
           this.nativeInterface!.unsubscribe(this.getTransactionId(), service, characteristic)
             .then(() => {
@@ -347,7 +354,7 @@ export class NativeBleManager implements BleManager {
               }
             })
         } else {
-          this.nSubscriptions.set(key, nSubscriptions - 1)
+          this.nSubscriptions.set(key, nSub - 1)
         }
       },
     }

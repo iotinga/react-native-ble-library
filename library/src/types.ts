@@ -157,7 +157,7 @@ export interface BleManager {
     size?: number,
     progress?: (current: number, total: number) => void,
     abortSignal?: AbortSignal
-  ): Promise<Buffer>
+  ): Promise<Uint8Array>
 
   /**
    * Requests a write for the specified characteristic. If the characteristic is chunked the
@@ -178,7 +178,7 @@ export interface BleManager {
   write(
     service: string,
     characteristic: string,
-    value: Buffer,
+    value: Uint8Array,
     chunkSize?: number,
     progress?: (current: number, total: number) => void,
     abortSignal?: AbortSignal
@@ -206,7 +206,7 @@ export interface BleManager {
   subscribe(
     service: string,
     characteristic: string,
-    onValueChanged: (value: Buffer) => void,
+    onValueChanged: (value: Uint8Array) => void,
     onError?: (error: BleError) => void
   ): Subscription
 
