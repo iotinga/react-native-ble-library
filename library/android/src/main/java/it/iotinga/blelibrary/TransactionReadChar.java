@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.util.Log;
 
+import androidx.annotation.RequiresApi;
 import androidx.annotation.RequiresPermission;
 
 import com.facebook.react.bridge.Promise;
@@ -11,6 +12,7 @@ import com.facebook.react.bridge.Promise;
 import java.util.Arrays;
 import java.util.Base64;
 
+@RequiresApi(26)
 public class TransactionReadChar extends GattTransaction {
   private static final String TAG = "PendingGattRead";
   private static final byte EOF_BYTE = (byte) 0xff;
@@ -21,7 +23,7 @@ public class TransactionReadChar extends GattTransaction {
   /** total bytes received from device */
   private int receivedBytes = 0;
   /** number of bytes to receive. 0 if size is unknown, in this case receive only 1 chunk */
-  private int totalSize;
+  private final int totalSize;
   private byte[] data;
   /** true if there is more data to receive from the device */
   private boolean hasMoreChunks = true;
@@ -52,6 +54,7 @@ public class TransactionReadChar extends GattTransaction {
     } else {
       data = bytes;
       receivedBytes = bytes.length;
+      hasMoreChunks = false;
     }
   }
 

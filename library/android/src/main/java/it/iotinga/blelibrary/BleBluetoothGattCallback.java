@@ -132,13 +132,23 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     Log.d(TAG, "onCharacteristicWrite - status: " + status);
 
     Transaction transaction = executor.getExecuting();
-    if (transaction instanceof GattTransaction) {
-      GattTransaction gattTransaction = (GattTransaction) transaction;
-      if (status == BluetoothGatt.GATT_SUCCESS) {
-        gattTransaction.onCharWrite(characteristic);
-      } else {
-        gattTransaction.onError(status);
+    if (transaction != null) {
+      try {
+        if (transaction instanceof GattTransaction) {
+          GattTransaction gattTransaction = (GattTransaction) transaction;
+          if (status == BluetoothGatt.GATT_SUCCESS) {
+            gattTransaction.onCharWrite(characteristic);
+          } else {
+            gattTransaction.onError(status);
+          }
+        }
+      } catch (Exception e) {
+        String msg = "unexpected exception in onCharacteristicWrite()" + e;
+        Log.e(TAG, msg);
+        transaction.fail(BleError.ERROR_GENERIC, msg);
       }
+    } else {
+      Log.w(TAG, "no transaction is pending. How do I get here?");
     }
 
     executor.process();
@@ -149,13 +159,23 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     Log.d(TAG, "onCharacteristicRead - status: " + status);
 
     Transaction transaction = executor.getExecuting();
-    if (transaction instanceof GattTransaction) {
-      GattTransaction gattTransaction = (GattTransaction) transaction;
-      if (status == BluetoothGatt.GATT_SUCCESS) {
-        gattTransaction.onCharRead(characteristic);
-      } else {
-        gattTransaction.onError(status);
+    if (transaction != null) {
+      try {
+        if (transaction instanceof GattTransaction) {
+          GattTransaction gattTransaction = (GattTransaction) transaction;
+          if (status == BluetoothGatt.GATT_SUCCESS) {
+            gattTransaction.onCharRead(characteristic);
+          } else {
+            gattTransaction.onError(status);
+          }
+        }
+      } catch (Exception e) {
+        String msg = "unexpected exception in onCharacteristicRead()" + e;
+        Log.e(TAG, msg);
+        transaction.fail(BleError.ERROR_GENERIC, msg);
       }
+    } else {
+      Log.w(TAG, "no transaction is pending. How do I get here?");
     }
 
     executor.process();
@@ -173,13 +193,23 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     Log.d(TAG, "onReadRemoteRssi - rssi: " + rssi + " status: " + status);
 
     Transaction transaction = executor.getExecuting();
-    if (transaction instanceof GattTransaction) {
-      GattTransaction gattTransaction = (GattTransaction) transaction;
-      if (status == BluetoothGatt.GATT_SUCCESS) {
-        gattTransaction.onReadRemoteRssi(rssi);
-      } else {
-        gattTransaction.onError(status);
+    if (transaction != null) {
+      try {
+        if (transaction instanceof GattTransaction) {
+          GattTransaction gattTransaction = (GattTransaction) transaction;
+          if (status == BluetoothGatt.GATT_SUCCESS) {
+            gattTransaction.onReadRemoteRssi(rssi);
+          } else {
+            gattTransaction.onError(status);
+          }
+        }
+      } catch (Exception e) {
+        String msg = "unexpected exception in onReadRemoteRssi()" + e;
+        Log.e(TAG, msg);
+        transaction.fail(BleError.ERROR_GENERIC, msg);
       }
+    } else {
+      Log.w(TAG, "no transaction is pending. How do I get here?");
     }
 
     executor.process();
