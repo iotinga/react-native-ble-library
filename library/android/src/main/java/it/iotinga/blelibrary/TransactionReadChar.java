@@ -22,40 +22,46 @@ public class TransactionReadChar extends GattTransaction {
   private final String charUuid;
   /** total bytes received from device */
   private int receivedBytes = 0;
-  /** number of bytes to receive. 0 if size is unknown, in this case receive only 1 chunk */
-  private final int totalSize;
   private byte[] data;
-  /** true if there is more data to receive from the device */
-  private boolean hasMoreChunks = true;
 
 
   TransactionReadChar(String transactionId, Promise promise, EventEmitter emitter, BluetoothGatt gatt, String serviceUuid, String charUuid, int totalSize) {
     super(transactionId, promise, emitter, gatt);
-    this.totalSize = totalSize;
     this.serviceUuid = serviceUuid;
     this.charUuid = charUuid;
     if (totalSize != 0) {
-      this.data = new byte[this.totalSize];
+      this.data = new byte[totalSize];
     }
   }
 
-  private void onChunk(byte[] bytes) {
+  /**
+   * Callback called when a chunk of data is received from the BLE stack
+   *
+   * @param bytes the bytes received
+   * @return true if more data has to be received
+   */
+  private boolean onChunk(byte[] bytes) {
     if (data != null) {
       if (data.length == 1 && data[0] == EOF_BYTE) {
         Log.i(TAG, "read a message of 1 byte 0xff: reached EOF");
 
-        hasMoreChunks = false;
+        return false;
       } else {
         for (byte b : bytes) {
-          data[receivedBytes++] = b;
+          if (receivedBytes < data.length) {
+            data[receivedBytes++] = b;
+          } else {
+            Log.w(TAG, "overflow of data array. Skip exceeding data");
+          }
         }
-        hasMoreChunks = receivedBytes < totalSize;
+        return receivedBytes < data.length;
       }
     } else {
       data = bytes;
       receivedBytes = bytes.length;
-      hasMoreChunks = false;
     }
+
+    return false;
   }
 
   @RequiresPermission("android.permission.BLUETOOTH_CONNECT")
@@ -71,12 +77,11 @@ public class TransactionReadChar extends GattTransaction {
   @Override
   @RequiresPermission("android.permission.BLUETOOTH_CONNECT")
   void onCharRead(BluetoothGattCharacteristic characteristic) {
-    onChunk(characteristic.getValue());
-
+    boolean hasMoreChunks = onChunk(characteristic.getValue());
     if (hasMoreChunks) {
       Log.i(TAG, "need to read another chunk of data");
 
-      emitter.emit(new RNEventProgress(id(), characteristic, receivedBytes, totalSize));
+      emitter.emit(new RNEventProgress(id(), characteristic, receivedBytes, data.length));
 
       sendReadChunk(characteristic);
     } else {
