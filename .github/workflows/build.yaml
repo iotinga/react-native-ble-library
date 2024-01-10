@@ -5,12 +5,6 @@ on:
       - master
       - hotfix/*
 
-env:
-  IOTINGA_PRIVATE_ZIP_PASSWORD: ${{ secrets.IOTINGA_PRIVATE_ZIP_PASSWORD }}
-  IOTINGA_BUILD_NUMBER: ${{ github.run_number }}
-  IOTINGA_RUN_ID: github-actions-${{ github.run_number }}
-  IOTINGA_CLI_URL: https://iotinga-deliverables.s3.eu-west-1.amazonaws.com/repo/python/iotinga_cli/iotinga_cli-production-py3-none-any.whl
-
 jobs:
   start-build:
     name: Build and publish ble library
@@ -19,18 +13,49 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
       - uses: actions/setup-node@v3
         with:
           node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Install Iotinga CLI
-        run: python3 -m pip install --user "${{ env.IOTINGA_CLI_URL }}"
+      - name: Bump version and push tag
+        uses: anothrNick/github-tag-action@1.64.0
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
 
-      - name: Run prepare
-        run: python3 -m iotinga ci prepare
+      - name: Bump version
+        working-directory: library/
+        run: npm version ${{ steps.version.output.new_tag }}
 
-      - name: Build ble-library
-        run: python3 -m iotinga ci build ble-library
+      - name: Commit new version
+        continue-on-error: true
+        run: git commit -am "[CI] bump version to $IOTINGA_VERSION" && git push
+
+      - name: Install dependencies
+        working-directory: library/
+        run: npm ci
+
+      - name: Publish npm package
+        run: npm publish
+        working-directory: library/
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@iotinga'
+
+      - name: Publish npm package (on private registry)
+        run: npm publish
+        working-directory: library/
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
