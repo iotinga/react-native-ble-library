@@ -32,6 +32,9 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
 
+      - name: Copy readme file to package directory (npm doesn't support symlinks!)
+        run: cp README.md library/
+
       - name: Bump version
         working-directory: library/
         run: npm version ${{ steps.version.outputs.new_tag }}
