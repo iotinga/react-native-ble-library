@@ -66,8 +66,9 @@ jobs:
     runs-on: linux-pve
 
     permissions:
-      pages: write      # to deploy to Pages
-      id-token: write   # to verify the deployment originates from an appropriate source
+      contents: read
+      pages: write
+      id-token: write
 
     environment:
       name: github-pages
