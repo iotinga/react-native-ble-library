@@ -32,7 +32,7 @@ jobs:
 
       - name: Bump version
         working-directory: library/
-        run: npm version ${{ steps.version.output.new_tag }}
+        run: npm version ${{ steps.version.outputs.new_tag }}
 
       - name: Commit new version
         continue-on-error: true
