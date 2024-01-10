@@ -18,6 +18,7 @@ jobs:
         with:
           node-version: '18'
           registry-url: 'https://registry.npmjs.org'
+          scope: '@iotinga'
 
       - uses: actions/setup-python@v4
         with:

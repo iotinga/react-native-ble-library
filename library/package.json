@@ -30,13 +30,14 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
-    "prepare": "bob build"
+    "prepare": "bob build",
+    "docs": "npx typedoc src/index.ts --out ../docs --cleanOutputDir"
   },
-  "repository": "https://github.com/iotinga/react-native-ble-library",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iotinga/react-native-ble-library.git"
+  },
   "author": "IOTINGA",
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
-  },
   "license": "UNLICENSED",
   "homepage": "https://github.com/iotinga/react-native-ble-library",
   "devDependencies": {
@@ -58,6 +59,7 @@
     "react-native": "0.72.6",
     "react-native-builder-bob": "^0.20.0",
     "turbo": "^1.10.7",
+    "typedoc": "^0.25.7",
     "typescript": "^5.0.2"
   },
   "dependencies": {
