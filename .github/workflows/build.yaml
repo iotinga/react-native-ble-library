@@ -6,7 +6,7 @@ on:
       - hotfix/*
 
 jobs:
-  start-build:
+  library:
     name: Build and publish ble library
     runs-on: linux-pve
     steps:
@@ -19,10 +19,6 @@ jobs:
           node-version: '18'
           registry-url: 'https://registry.npmjs.org'
           scope: '@iotinga'
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
 
       - name: Bump version and push tag
         uses: anothrNick/github-tag-action@1.64.0
@@ -64,3 +60,48 @@ jobs:
         working-directory: library/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docs:
+    name: Build and publish documentation on GitHub pages
+    runs-on: linux-pve
+
+    permissions:
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: library/
+        run: npm ci
+
+      - name: Build documentation
+        working-directory: library/
+        run: npm run docs
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v3
+
+      - name: Fix permissions
+        run: |
+          chmod -c -R +rX "docs/" | while read line; do
+            echo "::warning title=Invalid file permissions automatically fixed::$line"
+          done
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: docs/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
