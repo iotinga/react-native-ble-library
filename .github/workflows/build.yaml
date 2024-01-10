@@ -8,7 +8,7 @@ on:
 jobs:
   library:
     name: Build and publish ble library
-    runs-on: linux-pve
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
@@ -63,7 +63,7 @@ jobs:
 
   docs:
     name: Build and publish documentation on GitHub pages
-    runs-on: linux-pve
+    runs-on: ubuntu-latest
 
     permissions:
       contents: read
