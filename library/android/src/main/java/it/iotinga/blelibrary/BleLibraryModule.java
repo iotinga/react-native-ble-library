@@ -250,7 +250,9 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       Log.d(NAME, "starting GATT connection");
       context.mtu = mtu.intValue();
       gattCallback = new BleBluetoothGattCallback(emitter, context, executor);
-      context.gatt = device.connectGatt(getReactApplicationContext(), false, gattCallback);
+
+      // Must specify BluetoothDevice.TRANSPORT_LE otherwise this is not working on certain phones
+      context.gatt = device.connectGatt(getReactApplicationContext(), false, gattCallback, BluetoothDevice.TRANSPORT_LE);
       if (context.gatt == null) {
         promise.reject(BleError.ERROR_GATT.name(), "gatt instance is null");
       }
