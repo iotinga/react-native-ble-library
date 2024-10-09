@@ -247,8 +247,7 @@ export class NativeBleManager implements BleManager {
     characteristic = characteristic.toLowerCase()
 
     this.logger?.info(
-      `[BleManager] execute write(${characteristic}, ${Buffer.from(value.subarray(0, 50)).toString('base64')} (len: ${
-        value.length
+      `[BleManager] execute write(${characteristic}, ${Buffer.from(value.subarray(0, 50)).toString('base64')} (len: ${value.length
       }))`
     )
 
@@ -333,6 +332,8 @@ export class NativeBleManager implements BleManager {
             onError(new BleError(e.code, e.message))
           }
         })
+    } else {
+      this.nSubscriptions.set(key, nSubscriptions + 1)
     }
 
     return {
