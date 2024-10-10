@@ -38,7 +38,7 @@
     "url": "git+https://github.com/iotinga/react-native-ble-library.git"
   },
   "author": "IOTINGA",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/iotinga/react-native-ble-library",
   "devDependencies": {
     "@commitlint/config-conventional": "^17.0.2",
