@@ -1,8 +1,10 @@
 package it.iotinga.blelibrary;
 
 import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
+import android.os.ParcelUuid;
 import android.util.Log;
 
 import androidx.annotation.RequiresPermission;
@@ -12,10 +14,33 @@ import java.util.List;
 public class BleScanCallback extends ScanCallback {
   private static final String TAG = "BleScanCallback";
   private final EventEmitter eventEmitter;
+  private final List<ParcelUuid> filter;
 
-  BleScanCallback(EventEmitter eventEmitter) {
+  BleScanCallback(EventEmitter eventEmitter, List<ParcelUuid> filter) {
     super();
     this.eventEmitter = eventEmitter;
+    this.filter = filter;
+  }
+
+  private boolean resultPassesUuidFilter(ScanResult result) {
+    if (filter == null || filter.isEmpty()) {
+      return true;
+    }
+
+    ScanRecord record = result.getScanRecord();
+    if (record == null) {
+      return false;
+    }
+
+    for (ParcelUuid uuid : record.getServiceUuids()) {
+      for (ParcelUuid allowedUuid : filter) {
+        if (uuid.equals(allowedUuid)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   @Override
@@ -23,13 +48,15 @@ public class BleScanCallback extends ScanCallback {
   public void onScanResult(int callbackType, ScanResult result) {
     Log.i(TAG, String.format("got scan result: %s (callback type: %d)", result, callbackType));
 
-    boolean available = callbackType == ScanSettings.CALLBACK_TYPE_FIRST_MATCH
-      || callbackType == ScanSettings.CALLBACK_TYPE_ALL_MATCHES;
+    if (resultPassesUuidFilter(result)) {
+      boolean available = callbackType == ScanSettings.CALLBACK_TYPE_FIRST_MATCH
+        || callbackType == ScanSettings.CALLBACK_TYPE_ALL_MATCHES;
 
-    RNEventScanResult event = new RNEventScanResult();
-    event.add(result, available);
+      RNEventScanResult event = new RNEventScanResult();
+      event.add(result, available);
 
-    eventEmitter.emit(event);
+      eventEmitter.emit(event);
+    }
   }
 
   @Override
@@ -46,7 +73,9 @@ public class BleScanCallback extends ScanCallback {
 
     RNEventScanResult event = new RNEventScanResult();
     for (ScanResult result : results) {
-      event.add(result, true);
+      if (resultPassesUuidFilter(result)) {
+        event.add(result, true);
+      }
     }
 
     eventEmitter.emit(event);

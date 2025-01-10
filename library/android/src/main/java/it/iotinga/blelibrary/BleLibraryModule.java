@@ -137,34 +137,43 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   public void scanStart(ReadableArray filterUuid, Promise promise) {
     Log.d(NAME, String.format("scanStart(%s)", filterUuid));
 
+
     if (adapter == null) {
       promise.reject(BleError.ERROR_NOT_INITIALIZED.name(), "module is not initialized");
     } else {
-      Log.i(NAME, "starting scan");
+      boolean isFilteringSupported = adapter.isOffloadedFilteringSupported();
+      boolean isBatchingSupported = adapter.isOffloadedScanBatchingSupported();
+
+      Log.i(NAME, String.format("starting scan filter supported %b batching supported %b", isFilteringSupported, isBatchingSupported));
 
       List<ScanFilter> filters = null;
       ScanSettings.Builder settings = new ScanSettings.Builder()
         .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
         .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE);
 
-      if (filterUuid != null && filterUuid.size() > 0) {
+      List<ParcelUuid> uuidFilter = null;
+      if (isFilteringSupported && filterUuid != null && filterUuid.size() > 0) {
         settings.setCallbackType(ScanSettings.CALLBACK_TYPE_FIRST_MATCH | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
         filters = new ArrayList<>();
+        uuidFilter = new ArrayList<>();
         for (int i = 0; i < filterUuid.size(); i++) {
           String serviceUuid = filterUuid.getString(i);
           Log.d(NAME, "adding filter UUID: " + serviceUuid);
           ParcelUuid uuid = ParcelUuid.fromString(serviceUuid);
+          uuidFilter.add(uuid);
           filters.add(new ScanFilter.Builder().setServiceUuid(uuid).build());
         }
       } else {
         // avoid flooding JS with events
-        settings.setReportDelay(SCAN_REPORT_DELAY_MS);
+        if (isBatchingSupported) {
+          settings.setReportDelay(SCAN_REPORT_DELAY_MS);
+        }
         settings.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES);
       }
 
       if (scanner == null) {
         scanner = adapter.getBluetoothLeScanner();
-        scanCallback = new BleScanCallback(emitter);
+        scanCallback = new BleScanCallback(emitter, uuidFilter);
       } else {
         // stopping existing scan to restart it
         try {
