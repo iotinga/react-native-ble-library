@@ -33,6 +33,7 @@ public class BlePermissionsManager implements PermissionManager, PermissionListe
       this.permissions.add(Manifest.permission.BLUETOOTH);
       this.permissions.add(Manifest.permission.BLUETOOTH_ADMIN);
       this.permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+      this.permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
     }
   }
 
@@ -54,7 +55,7 @@ public class BlePermissionsManager implements PermissionManager, PermissionListe
   @Override
   public void ensure(PermissionManagerCheckCallback callback) {
     List<String> missingPermissions = getMissingPermissions();
-    if (missingPermissions.size() == 0) {
+    if (missingPermissions.isEmpty()) {
       Log.i(TAG, "all permissions granted :)");
       callback.onPermissionResponse(true);
     } else {
