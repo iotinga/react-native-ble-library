@@ -181,9 +181,12 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
     executor.process();
   }
 
+  // NOTE: this is deprecated but useful to support older OS!
   @Override
-  public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, @NonNull byte[] value) {
-    Log.d(TAG, "onCharacteristicChanged");
+  public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic) {
+    byte[] value = characteristic.getValue();
+
+    Log.d(TAG, "onCharacteristicChanged uuid " + characteristic.getUuid() + " value length " + value.length);
 
     eventEmitter.emit(new RNEventCharacteristicChanged(characteristic, value));
   }
