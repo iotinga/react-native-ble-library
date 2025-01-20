@@ -32,7 +32,14 @@ public class BleScanCallback extends ScanCallback {
       return false;
     }
 
-    for (ParcelUuid uuid : record.getServiceUuids()) {
+    List<ParcelUuid> uuids = record.getServiceUuids();
+    if (uuids == null) {
+      return false;
+    }
+    for (ParcelUuid uuid : uuids) {
+      if (uuid == null) {
+        continue;
+      }
       for (ParcelUuid allowedUuid : filter) {
         if (uuid.equals(allowedUuid)) {
           return true;
