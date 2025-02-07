@@ -10,6 +10,7 @@ import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
+import android.os.Build;
 import android.os.ParcelUuid;
 import android.util.Log;
 
@@ -147,20 +148,16 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       Log.i(NAME, String.format("starting scan filter supported %b batching supported %b", isFilteringSupported, isBatchingSupported));
 
       List<ScanFilter> filters = null;
-      ScanSettings.Builder settings = new ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-        .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE);
+      ScanSettings.Builder settings = new ScanSettings.Builder();
 
-      List<ParcelUuid> uuidFilter = null;
-      if (isFilteringSupported && filterUuid != null && filterUuid.size() > 0) {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isFilteringSupported && filterUuid != null && filterUuid.size() > 0) {
         settings.setCallbackType(ScanSettings.CALLBACK_TYPE_FIRST_MATCH | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
+
         filters = new ArrayList<>();
-        uuidFilter = new ArrayList<>();
         for (int i = 0; i < filterUuid.size(); i++) {
           String serviceUuid = filterUuid.getString(i);
           Log.d(NAME, "adding filter UUID: " + serviceUuid);
           ParcelUuid uuid = ParcelUuid.fromString(serviceUuid);
-          uuidFilter.add(uuid);
           filters.add(new ScanFilter.Builder().setServiceUuid(uuid).build());
         }
       } else {
@@ -168,12 +165,11 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
         if (isBatchingSupported) {
           settings.setReportDelay(SCAN_REPORT_DELAY_MS);
         }
-        settings.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES);
       }
 
       if (scanner == null) {
         scanner = adapter.getBluetoothLeScanner();
-        scanCallback = new BleScanCallback(emitter, uuidFilter);
+        scanCallback = new BleScanCallback(emitter);
       } else {
         // stopping existing scan to restart it
         try {
