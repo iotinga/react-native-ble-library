@@ -9,13 +9,12 @@ import java.util.Objects;
 import java.util.Queue;
 
 public class TransactionQueueExecutor implements TransactionExecutor {
-  private static final String TAG = "TransactionQueue";
 
   private final Queue<Transaction> queue = new LinkedList<>();
 
   @Override
   public void add(@NonNull Transaction transaction) {
-    Log.i(TAG, "queueing transaction " + transaction.id());
+    Log.i(Constants.LOG_TAG, "queueing transaction " + transaction.id());
 
     queue.add(transaction);
 
@@ -38,14 +37,14 @@ public class TransactionQueueExecutor implements TransactionExecutor {
     while (!queue.isEmpty() && queue.element().state() != TransactionState.EXECUTING) {
       Transaction top = queue.element();
       if (top.state().isTerminated()) {
-        Log.i(TAG, "transaction " + top.id() + " completed with state " + top.state().name());
+        Log.i(Constants.LOG_TAG, "transaction " + top.id() + " completed with state " + top.state().name());
         queue.remove();
       } else if (top.state() == TransactionState.PENDING) {
-        Log.i(TAG, "start transaction " + top.id());
+        Log.i(Constants.LOG_TAG, "start transaction " + top.id());
         try {
           top.start();
         } catch (Exception e) {
-          Log.w(TAG, "unhandled exception while starting transaction: " + e.getMessage());
+          Log.w(Constants.LOG_TAG, "unhandled exception while starting transaction: " + e.getMessage());
           top.fail(BleError.ERROR_GENERIC, "unhandled exception: " + e.getMessage());
         }
       }
@@ -56,7 +55,7 @@ public class TransactionQueueExecutor implements TransactionExecutor {
   public void cancel(String id) {
     for (Transaction t : queue) {
       if (Objects.equals(t.id(), id)) {
-        Log.i(TAG, "canceling transaction with id " + id);
+        Log.i(Constants.LOG_TAG, "canceling transaction with id " + id);
 
         t.cancel();
       }
@@ -65,7 +64,7 @@ public class TransactionQueueExecutor implements TransactionExecutor {
 
   @Override
   public void flush(BleError error, String message) {
-    Log.i(TAG, "flushing pending transaction queue");
+    Log.i(Constants.LOG_TAG, "flushing pending transaction queue");
 
     for (Transaction transaction : queue) {
       transaction.fail(error, message);

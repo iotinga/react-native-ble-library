@@ -7,7 +7,6 @@ import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Promise;
 
 public class PromiseTransaction implements Transaction {
-  private static final String TAG = "PromiseTransaction";
   private final String id;
   private final Promise promise;
   private TransactionState state = TransactionState.PENDING;
@@ -29,7 +28,7 @@ public class PromiseTransaction implements Transaction {
 
   @Override
   public void start() {
-    Log.i(TAG, "starting transaction " + id);
+    Log.i(Constants.LOG_TAG, "starting transaction " + id);
 
     state = TransactionState.EXECUTING;
   }
@@ -37,7 +36,7 @@ public class PromiseTransaction implements Transaction {
   @Override
   public void cancel() {
     if (!state.isTerminated()) {
-      Log.i(TAG, "canceled transaction " + id);
+      Log.i(Constants.LOG_TAG, "canceled transaction " + id);
 
       promise.reject(BleError.ERROR_OPERATION_CANCELED.name(), "the transaction was canceled");
       state = TransactionState.CANCELED;
@@ -47,7 +46,7 @@ public class PromiseTransaction implements Transaction {
   @Override
   public void succeed(@Nullable Object result) {
     if (!state.isTerminated()) {
-      Log.i(TAG, "transaction " + id + " succeeded");
+      Log.i(Constants.LOG_TAG, "transaction " + id + " succeeded");
 
       promise.resolve(result);
       state = TransactionState.SUCCEEDED;
@@ -57,7 +56,7 @@ public class PromiseTransaction implements Transaction {
   @Override
   public void fail(BleError code, String error) {
     if (!state.isTerminated()) {
-      Log.i(TAG, "transaction " + id + " failed (code: " + code + ", error: " + error + ")");
+      Log.i(Constants.LOG_TAG, "transaction " + id + " failed (code: " + code + ", error: " + error + ")");
 
       promise.reject(code.name(), error);
       state = TransactionState.FAILED;

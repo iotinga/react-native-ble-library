@@ -11,7 +11,6 @@ import androidx.annotation.RequiresPermission;
 import java.util.List;
 
 public class BleScanCallback extends ScanCallback {
-  private static final String TAG = "BleScanCallback";
   private final EventEmitter eventEmitter;
 
   BleScanCallback(EventEmitter eventEmitter) {
@@ -22,7 +21,7 @@ public class BleScanCallback extends ScanCallback {
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onScanResult(int callbackType, ScanResult result) {
-    Log.i(TAG, String.format("got scan result: %s (callback type: %d)", result, callbackType));
+    Log.i(Constants.LOG_TAG, String.format("got scan result: %s (callback type: %d)", result, callbackType));
 
     boolean available = callbackType == ScanSettings.CALLBACK_TYPE_FIRST_MATCH
       || callbackType == ScanSettings.CALLBACK_TYPE_ALL_MATCHES;
@@ -35,7 +34,7 @@ public class BleScanCallback extends ScanCallback {
 
   @Override
   public void onScanFailed(int errorCode) {
-    Log.e(TAG, "SCAN FAILED, error = " + errorCode);
+    Log.e(Constants.LOG_TAG, "SCAN FAILED, error = " + errorCode);
 
     eventEmitter.emit(new RNEventError(BleError.ERROR_SCAN, "scan error, native error code " + errorCode));
   }
@@ -43,7 +42,7 @@ public class BleScanCallback extends ScanCallback {
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onBatchScanResults(List<ScanResult> results) {
-    Log.i(TAG, "got batch result: " + results);
+    Log.i(Constants.LOG_TAG, "got batch result: " + results);
 
     RNEventScanResult event = new RNEventScanResult();
     for (ScanResult result : results) {

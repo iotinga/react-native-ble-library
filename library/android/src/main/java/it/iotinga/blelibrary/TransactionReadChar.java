@@ -14,7 +14,6 @@ import java.util.Base64;
 
 @RequiresApi(26)
 public class TransactionReadChar extends GattTransaction {
-  private static final String TAG = "PendingGattRead";
   private static final byte EOF_BYTE = (byte) 0xff;
 
   private final Base64.Encoder b64Encoder = Base64.getEncoder();
@@ -43,7 +42,7 @@ public class TransactionReadChar extends GattTransaction {
   private boolean onChunk(byte[] bytes) {
     if (data != null) {
       if (data.length == 1 && data[0] == EOF_BYTE) {
-        Log.i(TAG, "read a message of 1 byte 0xff: reached EOF");
+        Log.i(Constants.LOG_TAG, "read a message of 1 byte 0xff: reached EOF");
 
         return false;
       } else {
@@ -51,7 +50,7 @@ public class TransactionReadChar extends GattTransaction {
           if (receivedBytes < data.length) {
             data[receivedBytes++] = b;
           } else {
-            Log.w(TAG, "overflow of data array. Skip exceeding data");
+            Log.w(Constants.LOG_TAG, "overflow of data array. Skip exceeding data");
           }
         }
         return receivedBytes < data.length;
@@ -68,7 +67,7 @@ public class TransactionReadChar extends GattTransaction {
   private void sendReadChunk(BluetoothGattCharacteristic characteristic) {
     boolean success = gatt.readCharacteristic(characteristic);
     if (!success) {
-      Log.w(TAG, "error performing a read request");
+      Log.w(Constants.LOG_TAG, "error performing a read request");
 
       fail(BleError.ERROR_GATT, "readCharacteristic returned false");
     }
@@ -79,13 +78,13 @@ public class TransactionReadChar extends GattTransaction {
   void onCharRead(BluetoothGattCharacteristic characteristic) {
     boolean hasMoreChunks = onChunk(characteristic.getValue());
     if (hasMoreChunks) {
-      Log.i(TAG, "need to read another chunk of data");
+      Log.i(Constants.LOG_TAG, "need to read another chunk of data");
 
       emitter.emit(new RNEventProgress(id(), characteristic, receivedBytes, data.length));
 
       sendReadChunk(characteristic);
     } else {
-      Log.i(TAG, "all data read :)");
+      Log.i(Constants.LOG_TAG, "all data read :)");
 
       succeed(b64Encoder.encodeToString(Arrays.copyOf(data, receivedBytes)));
     }
@@ -98,11 +97,11 @@ public class TransactionReadChar extends GattTransaction {
 
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, charUuid);
     if (characteristic == null) {
-      Log.w(TAG, "the characteristic to be read is not found");
+      Log.w(Constants.LOG_TAG, "the characteristic to be read is not found");
 
       fail(BleError.ERROR_INVALID_ARGUMENTS, "characteristic not found in device");
     } else {
-      Log.i(TAG, "requesting a read from the device");
+      Log.i(Constants.LOG_TAG, "requesting a read from the device");
 
       sendReadChunk(characteristic);
     }

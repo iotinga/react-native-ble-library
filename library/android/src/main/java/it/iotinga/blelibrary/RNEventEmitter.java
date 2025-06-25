@@ -8,7 +8,6 @@ import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 public class RNEventEmitter implements EventEmitter {
-  private static final String TAG = "RNEventEmitter";
   private final ReactApplicationContext rnContext;
 
   RNEventEmitter(ReactApplicationContext rnContext) {
@@ -17,7 +16,7 @@ public class RNEventEmitter implements EventEmitter {
 
   @Override
   public void emit(RNEvent event) {
-    Log.d(TAG, String.format("sending event: %s payload %s", event.name(), event.payload()));
+    Log.d(Constants.LOG_TAG, String.format("sending event: %s payload %s", event.name(), event.payload()));
 
     rnContext
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)

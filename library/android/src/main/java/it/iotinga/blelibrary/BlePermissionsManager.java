@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class BlePermissionsManager implements PermissionManager, PermissionListener {
-  private static final String TAG = "BlePermissionsManager";
   private static final int PERMISSION_REQUEST_CODE = 2;
 
   private final List<String> permissions;
@@ -43,9 +42,9 @@ public class BlePermissionsManager implements PermissionManager, PermissionListe
     for (String permission : permissions) {
       if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
         missingPermissions.add(permission);
-        Log.w(TAG, "missing permission: " + permission);
+        Log.w(Constants.LOG_TAG, "missing permission: " + permission);
       } else {
-        Log.d(TAG, "granted permissions: " + permission);
+        Log.d(Constants.LOG_TAG, "granted permissions: " + permission);
       }
     }
 
@@ -56,16 +55,16 @@ public class BlePermissionsManager implements PermissionManager, PermissionListe
   public void ensure(PermissionManagerCheckCallback callback) {
     List<String> missingPermissions = getMissingPermissions();
     if (missingPermissions.isEmpty()) {
-      Log.i(TAG, "all permissions granted :)");
+      Log.i(Constants.LOG_TAG, "all permissions granted :)");
       callback.onPermissionResponse(true);
     } else {
       PermissionAwareActivity activity = (PermissionAwareActivity) context.getCurrentActivity();
       if (activity == null) {
-        Log.w(TAG, "request permissions since activity is null");
+        Log.w(Constants.LOG_TAG, "request permissions since activity is null");
 
         callback.onPermissionResponse(false);
       } else {
-        Log.d(TAG, "requesting permissions: " + missingPermissions);
+        Log.d(Constants.LOG_TAG, "requesting permissions: " + missingPermissions);
 
         this.callback = callback;
         activity.requestPermissions(missingPermissions.toArray(new String[0]), PERMISSION_REQUEST_CODE, this);
@@ -76,15 +75,15 @@ public class BlePermissionsManager implements PermissionManager, PermissionListe
   @Override
   public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] responses) {
     if (requestCode == PERMISSION_REQUEST_CODE) {
-      Log.d(TAG, "permissions request callback: " + requestCode);
+      Log.d(Constants.LOG_TAG, "permissions request callback: " + requestCode);
 
       boolean allPermissionsGranted = true;
       for (int i = 0; i < permissions.length; i++) {
         if (responses[i] != PackageManager.PERMISSION_GRANTED) {
-          Log.w(TAG, "permission not granted: " + permissions[i]);
+          Log.w(Constants.LOG_TAG, "permission not granted: " + permissions[i]);
           allPermissionsGranted = false;
         } else {
-          Log.d(TAG, "permission granted: " + permissions[i]);
+          Log.d(Constants.LOG_TAG, "permission granted: " + permissions[i]);
         }
       }
 

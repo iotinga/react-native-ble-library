@@ -8,7 +8,6 @@ import androidx.annotation.RequiresPermission;
 import com.facebook.react.bridge.Promise;
 
 public class TransactionReadRssi extends GattTransaction {
-  private static final String TAG = "TransactionReadRssi";
 
   TransactionReadRssi(String transactionId, Promise promise, EventEmitter emitter, BluetoothGatt gatt) {
     super(transactionId, promise, emitter, gatt);
@@ -21,9 +20,9 @@ public class TransactionReadRssi extends GattTransaction {
 
     boolean success = gatt.readRemoteRssi();
     if (success) {
-      Log.i(TAG, "requested read remote RSSI");
+      Log.i(Constants.LOG_TAG, "requested read remote RSSI");
     } else {
-      Log.w(TAG, "error requesting read remote RSSI");
+      Log.w(Constants.LOG_TAG, "error requesting read remote RSSI");
 
       fail(BleError.ERROR_GATT, "error requesting remote RSSI");
     }

@@ -10,13 +10,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresPermission;
 
 public class BleBluetoothGattCallback extends BluetoothGattCallback {
-  private static final String TAG = "BleGattCallback";
-
   private final EventEmitter eventEmitter;
   private final ConnectionContext connectionContext;
   private final TransactionExecutor executor;
 
-  BleBluetoothGattCallback(EventEmitter eventEmitter, ConnectionContext connectionContext, TransactionExecutor executor) {
+  BleBluetoothGattCallback(EventEmitter eventEmitter, ConnectionContext connectionContext,
+      TransactionExecutor executor) {
     this.eventEmitter = eventEmitter;
     this.connectionContext = connectionContext;
     this.executor = executor;
@@ -25,42 +24,46 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onConnectionStateChange(@NonNull BluetoothGatt gatt, int status, int newState) {
-    Log.d(TAG, "onConnectionStateChange - status: " + status + ", newState: " + newState);
+    Log.d(Constants.LOG_TAG, "onConnectionStateChange - status: " + status + ", newState: " + newState);
 
     if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
-      Log.i(TAG, "device is successfully connected. Requesting MTU");
+      Log.i(Constants.LOG_TAG, "device is successfully connected. Requesting MTU");
 
       if (connectionContext.mtu > 0) {
-        Log.i(TAG, "setting the MTU to: " + connectionContext.mtu);
+        Log.i(Constants.LOG_TAG, "setting the MTU to: " + connectionContext.mtu);
 
         boolean success = gatt.requestMtu(connectionContext.mtu);
         if (success) {
-          eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.REQUESTING_MTU, RNEventConnectionStateChanged.SUCCESS));
+          eventEmitter.emit(
+              new RNEventConnectionStateChanged(ConnectionState.REQUESTING_MTU, RNEventConnectionStateChanged.SUCCESS));
         } else {
-          Log.w(TAG, "error sending MTU request for device.");
+          Log.w(Constants.LOG_TAG, "error sending MTU request for device.");
 
           gatt.disconnect();
 
-          eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.DISCONNECTING, RNEventConnectionStateChanged.FAILURE));
+          eventEmitter.emit(
+              new RNEventConnectionStateChanged(ConnectionState.DISCONNECTING, RNEventConnectionStateChanged.FAILURE));
         }
       } else {
-        Log.i(TAG, "using default MTU, discovering services");
+        Log.i(Constants.LOG_TAG, "using default MTU, discovering services");
 
         boolean success = gatt.discoverServices();
         if (success) {
-          eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.DISCOVERING_SERVICES, RNEventConnectionStateChanged.SUCCESS));
+          eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.DISCOVERING_SERVICES,
+              RNEventConnectionStateChanged.SUCCESS));
         } else {
-          Log.w(TAG, "error sending service discovery request for device.");
+          Log.w(Constants.LOG_TAG, "error sending service discovery request for device.");
 
           gatt.disconnect();
 
-          eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.DISCONNECTING, RNEventConnectionStateChanged.FAILURE));
+          eventEmitter.emit(
+              new RNEventConnectionStateChanged(ConnectionState.DISCONNECTING, RNEventConnectionStateChanged.FAILURE));
         }
       }
     }
 
     if (status != BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
-      Log.w(TAG, "connection failed unexpectedly. Trigger a new connection to device");
+      Log.w(Constants.LOG_TAG, "connection failed unexpectedly. Trigger a new connection to device");
 
       // cancel all pending transaction
       executor.flush(BleError.ERROR_NOT_CONNECTED, "device has disconnected (unexpectedly)");
@@ -69,14 +72,15 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
       if (success) {
         eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.CONNECTING_TO_DEVICE, status));
       } else {
-        Log.w(TAG, "error asking for device reconnect");
+        Log.w(Constants.LOG_TAG, "error asking for device reconnect");
 
-        eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.DISCONNECTED, RNEventConnectionStateChanged.FAILURE));
+        eventEmitter.emit(
+            new RNEventConnectionStateChanged(ConnectionState.DISCONNECTED, RNEventConnectionStateChanged.FAILURE));
       }
     }
 
     if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
-      Log.w(TAG, "expected disconnection");
+      Log.w(Constants.LOG_TAG, "expected disconnection");
 
       // cancel all pending transaction
       executor.flush(BleError.ERROR_NOT_CONNECTED, "device has disconnected (expectedly)");
@@ -88,37 +92,40 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onMtuChanged(@NonNull BluetoothGatt gatt, int mtu, int status) {
-    Log.d(TAG, "onMtuChanged - status: " + status + ", mtu: " + mtu);
+    Log.d(Constants.LOG_TAG, "onMtuChanged - status: " + status + ", mtu: " + mtu);
 
     if (status == BluetoothGatt.GATT_FAILURE) {
-      Log.w(TAG, "error setting MTU. Continuing anyway in the connection process using default MTU");
+      Log.w(Constants.LOG_TAG, "error setting MTU. Continuing anyway in the connection process using default MTU");
     } else {
-      Log.i(TAG, "set of the MTU is successful. Proceed with service discovery");
+      Log.i(Constants.LOG_TAG, "set of the MTU is successful. Proceed with service discovery");
     }
 
     boolean success = gatt.discoverServices();
     if (success) {
-      eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.DISCOVERING_SERVICES, RNEventConnectionStateChanged.SUCCESS));
+      eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.DISCOVERING_SERVICES,
+          RNEventConnectionStateChanged.SUCCESS));
     } else {
-      Log.w(TAG, "error asking for service discovery. Try to reset connection");
+      Log.w(Constants.LOG_TAG, "error asking for service discovery. Try to reset connection");
 
       gatt.disconnect();
 
-      eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.DISCONNECTING, RNEventConnectionStateChanged.FAILURE));
+      eventEmitter.emit(
+          new RNEventConnectionStateChanged(ConnectionState.DISCONNECTING, RNEventConnectionStateChanged.FAILURE));
     }
   }
 
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void onServicesDiscovered(@NonNull BluetoothGatt gatt, int status) {
-    Log.d(TAG, "onServiceDiscovered - status: " + status);
+    Log.d(Constants.LOG_TAG, "onServiceDiscovered - status: " + status);
 
     if (status == BluetoothGatt.GATT_SUCCESS) {
-      Log.i(TAG, "service discovery success. The device is now ready to be used");
+      Log.i(Constants.LOG_TAG, "service discovery success. The device is now ready to be used");
 
-      eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.CONNECTED, RNEventConnectionStateChanged.SUCCESS, gatt.getServices()));
+      eventEmitter.emit(new RNEventConnectionStateChanged(ConnectionState.CONNECTED,
+          RNEventConnectionStateChanged.SUCCESS, gatt.getServices()));
     } else {
-      Log.w(TAG, "error discovering services. Try to reset the connection with the device");
+      Log.w(Constants.LOG_TAG, "error discovering services. Try to reset the connection with the device");
 
       gatt.disconnect();
 
@@ -128,8 +135,9 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
 
   @Override
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
-  public void onCharacteristicWrite(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, int status) {
-    Log.d(TAG, "onCharacteristicWrite - status: " + status);
+  public void onCharacteristicWrite(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic,
+      int status) {
+    Log.d(Constants.LOG_TAG, "onCharacteristicWrite - status: " + status);
 
     Transaction transaction = executor.getExecuting();
     if (transaction != null) {
@@ -144,19 +152,20 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
         }
       } catch (Exception e) {
         String msg = "unexpected exception in onCharacteristicWrite()" + e;
-        Log.e(TAG, msg);
+        Log.e(Constants.LOG_TAG, msg);
         transaction.fail(BleError.ERROR_GENERIC, msg);
       }
     } else {
-      Log.w(TAG, "no transaction is pending. How do I get here?");
+      Log.w(Constants.LOG_TAG, "no transaction is pending. How do I get here?");
     }
 
     executor.process();
   }
 
   @Override
-  public void onCharacteristicRead(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic, int status) {
-    Log.d(TAG, "onCharacteristicRead - status: " + status);
+  public void onCharacteristicRead(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic,
+      int status) {
+    Log.d(Constants.LOG_TAG, "onCharacteristicRead - status: " + status);
 
     Transaction transaction = executor.getExecuting();
     if (transaction != null) {
@@ -171,11 +180,11 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
         }
       } catch (Exception e) {
         String msg = "unexpected exception in onCharacteristicRead()" + e;
-        Log.e(TAG, msg);
+        Log.e(Constants.LOG_TAG, msg);
         transaction.fail(BleError.ERROR_GENERIC, msg);
       }
     } else {
-      Log.w(TAG, "no transaction is pending. How do I get here?");
+      Log.w(Constants.LOG_TAG, "no transaction is pending. How do I get here?");
     }
 
     executor.process();
@@ -183,17 +192,18 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
 
   // NOTE: this is deprecated but useful to support older OS!
   @Override
-  public void onCharacteristicChanged(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic) {
+  public void onCharacteristicChanged(@NonNull BluetoothGatt gatt,
+      @NonNull BluetoothGattCharacteristic characteristic) {
     byte[] value = characteristic.getValue();
 
-    Log.d(TAG, "onCharacteristicChanged uuid " + characteristic.getUuid() + " value length " + value.length);
+    Log.d(Constants.LOG_TAG, "onCharacteristicChanged uuid " + characteristic.getUuid() + " value length " + value.length);
 
     eventEmitter.emit(new RNEventCharacteristicChanged(characteristic, value));
   }
 
   @Override
   public void onReadRemoteRssi(BluetoothGatt gatt, int rssi, int status) {
-    Log.d(TAG, "onReadRemoteRssi - rssi: " + rssi + " status: " + status);
+    Log.d(Constants.LOG_TAG, "onReadRemoteRssi - rssi: " + rssi + " status: " + status);
 
     Transaction transaction = executor.getExecuting();
     if (transaction != null) {
@@ -208,11 +218,11 @@ public class BleBluetoothGattCallback extends BluetoothGattCallback {
         }
       } catch (Exception e) {
         String msg = "unexpected exception in onReadRemoteRssi()" + e;
-        Log.e(TAG, msg);
+        Log.e(Constants.LOG_TAG, msg);
         transaction.fail(BleError.ERROR_GENERIC, msg);
       }
     } else {
-      Log.w(TAG, "no transaction is pending. How do I get here?");
+      Log.w(Constants.LOG_TAG, "no transaction is pending. How do I get here?");
     }
 
     executor.process();

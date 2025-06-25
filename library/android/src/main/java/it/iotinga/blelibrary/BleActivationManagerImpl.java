@@ -12,8 +12,6 @@ import com.facebook.react.bridge.ActivityEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
 
 public class BleActivationManagerImpl implements BleActivationManager, ActivityEventListener {
-  private static final String TAG = "BleActivationManager";
-
   private final static int REQUEST_ENABLE_BT = 1;
   private final BluetoothAdapter adapter;
   private final ReactApplicationContext context;
@@ -28,16 +26,16 @@ public class BleActivationManagerImpl implements BleActivationManager, ActivityE
   @RequiresPermission("android.permission.BLUETOOTH_CONNECT")
   public void ensureBleActive(BleActivationCallback callback) {
     if (adapter.isEnabled()) {
-      Log.i(TAG, "Bluetooth is active :)");
+      Log.i(Constants.LOG_TAG, "Bluetooth is active :)");
       callback.onResult(true);
     } else {
       Activity activity = context.getCurrentActivity();
       if (activity == null) {
-        Log.w(TAG, "cannot show Bluetooth turn on request since activity is null");
+        Log.w(Constants.LOG_TAG, "cannot show Bluetooth turn on request since activity is null");
 
         callback.onResult(false);
       } else {
-        Log.d(TAG, "show Bluetooth activation request UI");
+        Log.d(Constants.LOG_TAG, "show Bluetooth activation request UI");
 
         this.callback = callback;
         context.addActivityEventListener(this);
@@ -51,7 +49,7 @@ public class BleActivationManagerImpl implements BleActivationManager, ActivityE
   @Override
   public void onActivityResult(Activity activity, int requestCode, int resultCode, @Nullable Intent intent) {
     if (requestCode == REQUEST_ENABLE_BT) {
-      Log.i(TAG, "Bluetooth activation response: " + resultCode);
+      Log.i(Constants.LOG_TAG, "Bluetooth activation response: " + resultCode);
 
       context.removeActivityEventListener(this);
 
@@ -63,5 +61,6 @@ public class BleActivationManagerImpl implements BleActivationManager, ActivityE
   }
 
   @Override
-  public void onNewIntent(Intent intent) {}
+  public void onNewIntent(Intent intent) {
+  }
 }

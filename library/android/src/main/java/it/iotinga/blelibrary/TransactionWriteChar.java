@@ -11,7 +11,6 @@ import com.facebook.react.bridge.Promise;
 import java.util.Arrays;
 
 public class TransactionWriteChar extends GattTransaction {
-  private static final String TAG = "TransactionWriteChar";
   private final String serviceUuid;
   private final String characteristicUuid;
   private final byte[] bytes;
@@ -46,13 +45,13 @@ public class TransactionWriteChar extends GattTransaction {
   private void sendWriteChunk(BluetoothGattCharacteristic characteristic) {
     boolean setValueSuccess = characteristic.setValue(getNextChunk());
     if (!setValueSuccess) {
-      Log.w(TAG, "error setting value to be written");
+      Log.w(Constants.LOG_TAG, "error setting value to be written");
 
       fail(BleError.ERROR_GATT, "error setting characteristic value");
     } else {
       boolean writeSuccess = gatt.writeCharacteristic(characteristic);
       if (!writeSuccess) {
-        Log.w(TAG, "error requesting characteristic write");
+        Log.w(Constants.LOG_TAG, "error requesting characteristic write");
 
         fail(BleError.ERROR_GATT, "error requesting characteristic write");
       }
@@ -66,11 +65,11 @@ public class TransactionWriteChar extends GattTransaction {
 
     BluetoothGattCharacteristic characteristic = getCharacteristic(serviceUuid, characteristicUuid);
     if (characteristic == null) {
-      Log.w(TAG, "characteristic with such ID was not found");
+      Log.w(Constants.LOG_TAG, "characteristic with such ID was not found");
 
       fail(BleError.ERROR_INVALID_ARGUMENTS, "characteristic which such UUID not found");
     } else {
-      Log.i(TAG, "requesting write of first chunk");
+      Log.i(Constants.LOG_TAG, "requesting write of first chunk");
 
       sendWriteChunk(characteristic);
     }
@@ -81,13 +80,13 @@ public class TransactionWriteChar extends GattTransaction {
   @RequiresPermission("android.permission.BLUETOOTH_CONNECT")
   void onCharWrite(BluetoothGattCharacteristic characteristic) {
     if (hasNextChunk()) {
-      Log.i(TAG, "write chunk success, requesting another chunk");
+      Log.i(Constants.LOG_TAG, "write chunk success, requesting another chunk");
 
       emitter.emit(new RNEventProgress(id(), characteristic, writtenBytes, bytes.length));
 
       sendWriteChunk(characteristic);
     } else {
-      Log.i(TAG, "written all data successfully");
+      Log.i(Constants.LOG_TAG, "written all data successfully");
 
       succeed(null);
     }

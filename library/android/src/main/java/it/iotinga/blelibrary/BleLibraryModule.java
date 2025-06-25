@@ -54,41 +54,41 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void initModule(Promise promise) {
-    Log.d(NAME, "initModule()");
+    Log.d(Constants.LOG_TAG, "initModule()");
 
     ReactApplicationContext reactContext = getReactApplicationContext();
 
-    Log.i(NAME, "checking permissions");
+    Log.i(Constants.LOG_TAG, "checking permissions");
     PermissionManager permissionManager = new BlePermissionsManager(reactContext);
     permissionManager.ensure((granted) -> {
       if (!granted) {
-        Log.w(NAME, "permission denied");
+        Log.w(Constants.LOG_TAG, "permission denied");
 
         promise.reject(BleError.ERROR_MISSING_PERMISSIONS.name(), "missing BLE permissions");
       } else {
-        Log.i(NAME, "permission granted");
+        Log.i(Constants.LOG_TAG, "permission granted");
 
         manager = (BluetoothManager) reactContext.getSystemService(Context.BLUETOOTH_SERVICE);
         adapter = manager.getAdapter();
         if (adapter == null) {
-          Log.w(NAME, "this device doesn't have a BLE adapter");
+          Log.w(Constants.LOG_TAG, "this device doesn't have a BLE adapter");
 
           promise.reject(BleError.ERROR_BLE_NOT_SUPPORTED.name(), "this device doesn't support BLE");
         } else {
-          Log.i(NAME, "checking if BLE is active");
+          Log.i(Constants.LOG_TAG, "checking if BLE is active");
 
           BleActivationManager activationManager = new BleActivationManagerImpl(adapter, reactContext);
           activationManager.ensureBleActive(isActive -> {
             if (!isActive) {
-              Log.w(NAME, "BLE is not active");
+              Log.w(Constants.LOG_TAG, "BLE is not active");
 
               promise.reject(BleError.ERROR_BLE_NOT_ENABLED.name(), "BLE is not active and user denied activation");
             } else {
-              Log.i(NAME, "BLE is active, proceed with resources initialization");
+              Log.i(Constants.LOG_TAG, "BLE is active, proceed with resources initialization");
 
               emitter = new RNEventEmitter(reactContext);
 
-              Log.i(NAME, "module initialization done :)");
+              Log.i(Constants.LOG_TAG, "module initialization done :)");
               promise.resolve(null);
             }
           });
@@ -98,9 +98,9 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  @RequiresPermission(allOf = {"android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT"})
+  @RequiresPermission(allOf = { "android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT" })
   public void disposeModule(Promise promise) {
-    Log.d(NAME, "disposeModule()");
+    Log.d(Constants.LOG_TAG, "disposeModule()");
 
     executor.flush(BleError.ERROR_NOT_INITIALIZED, "module disposed");
 
@@ -120,13 +120,13 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
     manager = null;
     emitter = null;
 
-    Log.i(NAME, "module disposed correctly :)");
+    Log.i(Constants.LOG_TAG, "module disposed correctly :)");
     promise.resolve(null);
   }
 
   @ReactMethod
   public void cancel(String transactionId, Promise promise) {
-    Log.d(NAME, String.format("cancel(%s)", transactionId));
+    Log.d(Constants.LOG_TAG, String.format("cancel(%s)", transactionId));
 
     executor.cancel(transactionId);
 
@@ -136,8 +136,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   @ReactMethod
   @RequiresPermission("android.permission.BLUETOOTH_SCAN")
   public void scanStart(ReadableArray filterUuid, Promise promise) {
-    Log.d(NAME, String.format("scanStart(%s)", filterUuid));
-
+    Log.d(Constants.LOG_TAG, String.format("scanStart(%s)", filterUuid));
 
     if (adapter == null) {
       promise.reject(BleError.ERROR_NOT_INITIALIZED.name(), "module is not initialized");
@@ -145,18 +144,20 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       boolean isFilteringSupported = adapter.isOffloadedFilteringSupported();
       boolean isBatchingSupported = adapter.isOffloadedScanBatchingSupported();
 
-      Log.i(NAME, String.format("starting scan filter supported %b batching supported %b", isFilteringSupported, isBatchingSupported));
+      Log.i(Constants.LOG_TAG, String.format("starting scan filter supported %b batching supported %b", isFilteringSupported,
+          isBatchingSupported));
 
       List<ScanFilter> filters = null;
       ScanSettings.Builder settings = new ScanSettings.Builder();
 
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isFilteringSupported && filterUuid != null && filterUuid.size() > 0) {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isFilteringSupported && filterUuid != null
+          && filterUuid.size() > 0) {
         settings.setCallbackType(ScanSettings.CALLBACK_TYPE_FIRST_MATCH | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
 
         filters = new ArrayList<>();
         for (int i = 0; i < filterUuid.size(); i++) {
           String serviceUuid = filterUuid.getString(i);
-          Log.d(NAME, "adding filter UUID: " + serviceUuid);
+          Log.d(Constants.LOG_TAG, "adding filter UUID: " + serviceUuid);
           ParcelUuid uuid = ParcelUuid.fromString(serviceUuid);
           filters.add(new ScanFilter.Builder().setServiceUuid(uuid).build());
         }
@@ -175,7 +176,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
         try {
           scanner.stopScan(scanCallback);
         } catch (Exception e) {
-          Log.w(NAME, "error stopping scan: " + e.getMessage() + ". Ignoring and continuing anyway");
+          Log.w(Constants.LOG_TAG, "error stopping scan: " + e.getMessage() + ". Ignoring and continuing anyway");
         }
       }
 
@@ -184,7 +185,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
         promise.resolve(null);
       } catch (Exception e) {
-        Log.e(NAME, "error starting scan: " + e.getMessage());
+        Log.e(Constants.LOG_TAG, "error starting scan: " + e.getMessage());
         promise.reject(BleError.ERROR_SCAN.name(), "error starting scan: " + e.getMessage(), e);
       }
     }
@@ -193,13 +194,13 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   @ReactMethod
   @RequiresPermission("android.permission.BLUETOOTH_SCAN")
   public void scanStop(Promise promise) {
-    Log.d(NAME, "scanStop()");
+    Log.d(Constants.LOG_TAG, "scanStop()");
 
     if (scanner != null) {
       try {
         scanner.stopScan(scanCallback);
       } catch (Exception e) {
-        Log.w(NAME, "error stopping scan, error: " + e.getMessage());
+        Log.w(Constants.LOG_TAG, "error stopping scan, error: " + e.getMessage());
         // ignore error here, this is expected to fail in case BLE is turned off
       }
       scanner = null;
@@ -210,21 +211,21 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  @RequiresPermission(allOf = {"android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT"})
+  @RequiresPermission(allOf = { "android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT" })
   public void connect(String id, Double mtu, Promise promise) {
-    Log.d(NAME, String.format("connect(%s, %f)", id, mtu));
+    Log.d(Constants.LOG_TAG, String.format("connect(%s, %f)", id, mtu));
 
     try {
       // ensure scan is not active (can create problems on some devices)
       if (scanner != null) {
-        Log.i(NAME, "stopping BLE scan");
+        Log.i(Constants.LOG_TAG, "stopping BLE scan");
 
         try {
           scanner.stopScan(scanCallback);
           scanner = null;
           scanCallback = null;
         } catch (Exception e) {
-          Log.w(NAME, "failed stopping scan: " + e);
+          Log.w(Constants.LOG_TAG, "failed stopping scan: " + e);
         }
       }
 
@@ -232,7 +233,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       adapter.cancelDiscovery();
 
       if (context.gatt != null) {
-        Log.i(NAME, "closing existing GATT instance");
+        Log.i(Constants.LOG_TAG, "closing existing GATT instance");
 
         context.gatt.close();
         context.gatt = null;
@@ -245,19 +246,20 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       try {
         device = adapter.getRemoteDevice(id);
       } catch (Exception e) {
-        Log.e(NAME, "cannot find device with address " + id);
+        Log.e(Constants.LOG_TAG, "cannot find device with address " + id);
 
         promise.reject(BleError.ERROR_DEVICE_NOT_FOUND.name(), "the specified device was not found");
         return;
       }
 
-
-      Log.d(NAME, "starting GATT connection");
+      Log.d(Constants.LOG_TAG, "starting GATT connection");
       context.mtu = mtu.intValue();
       gattCallback = new BleBluetoothGattCallback(emitter, context, executor);
 
-      // Must specify BluetoothDevice.TRANSPORT_LE otherwise this is not working on certain phones
-      context.gatt = device.connectGatt(getReactApplicationContext(), false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+      // Must specify BluetoothDevice.TRANSPORT_LE otherwise this is not working on
+      // certain phones
+      context.gatt = device.connectGatt(getReactApplicationContext(), false, gattCallback,
+          BluetoothDevice.TRANSPORT_LE);
       if (context.gatt == null) {
         promise.reject(BleError.ERROR_GATT.name(), "gatt instance is null");
       }
@@ -266,14 +268,14 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       promise.resolve(null);
     } catch (Exception e) {
       promise.reject(BleError.ERROR_GATT.name(), "unhandled exception: " + e.getMessage(), e);
-      Log.e(NAME, "unhandled exception: " + e.getMessage());
+      Log.e(Constants.LOG_TAG, "unhandled exception: " + e.getMessage());
     }
   }
 
   @ReactMethod
   @RequiresPermission("android.permission.BLUETOOTH_CONNECT")
   public void disconnect(Promise promise) {
-    Log.d(NAME, "disconnect()");
+    Log.d(Constants.LOG_TAG, "disconnect()");
 
     executor.flush(BleError.ERROR_NOT_CONNECTED, "disconnecting device");
 
@@ -281,12 +283,12 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       try {
         context.gatt.disconnect();
       } catch (Exception e) {
-        Log.w(NAME, "disconnect failed. Continuing anyway, error: " + e.getMessage());
+        Log.w(Constants.LOG_TAG, "disconnect failed. Continuing anyway, error: " + e.getMessage());
       }
       try {
         context.gatt.close();
       } catch (Exception e) {
-        Log.w(NAME, "gatt close failed. Continuing anyway, error: " + e.getMessage());
+        Log.w(Constants.LOG_TAG, "gatt close failed. Continuing anyway, error: " + e.getMessage());
       }
       context.gatt = null;
     }
@@ -296,21 +298,23 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void readRSSI(String transactionId, Promise promise) {
-    Log.d(NAME, "readRSSI()");
+    Log.d(Constants.LOG_TAG, "readRSSI()");
 
     executor.add(new TransactionReadRssi(transactionId, promise, emitter, context.gatt));
   }
 
   @ReactMethod
   public void read(String transactionId, String service, String characteristic, Double size, Promise promise) {
-    Log.d(NAME, String.format("read(%s, %s, %f)", service, characteristic, size));
+    Log.d(Constants.LOG_TAG, String.format("read(%s, %s, %f)", service, characteristic, size));
 
-    executor.add(new TransactionReadChar(transactionId, promise, emitter, context.gatt, service, characteristic, size.intValue()));
+    executor.add(new TransactionReadChar(transactionId, promise, emitter, context.gatt, service, characteristic,
+        size.intValue()));
   }
 
   @ReactMethod
-  public void write(String transactionId, String service, String characteristic, String value, Double chunkSize, Promise promise) {
-    Log.d(NAME, String.format("write(%s, %s, %s, %f)", service, characteristic, value, chunkSize));
+  public void write(String transactionId, String service, String characteristic, String value, Double chunkSize,
+      Promise promise) {
+    Log.d(Constants.LOG_TAG, String.format("write(%s, %s, %s, %f)", service, characteristic, value, chunkSize));
 
     byte[] data;
     try {
@@ -320,7 +324,8 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       return;
     }
 
-    executor.add(new TransactionWriteChar(transactionId, promise, emitter, context.gatt, service, characteristic, data, chunkSize.intValue()));
+    executor.add(new TransactionWriteChar(transactionId, promise, emitter, context.gatt, service, characteristic, data,
+        chunkSize.intValue()));
   }
 
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
@@ -329,7 +334,8 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       if (context.gatt == null) {
         promise.reject(BleError.ERROR_NOT_CONNECTED.name(), "device is not connected");
       } else {
-        BluetoothGattCharacteristic characteristic = GattTransaction.getCharacteristic(context.gatt, serviceUuid, characteristicUuid);
+        BluetoothGattCharacteristic characteristic = GattTransaction.getCharacteristic(context.gatt, serviceUuid,
+            characteristicUuid);
         if (characteristic == null) {
           promise.reject(BleError.ERROR_INVALID_ARGUMENTS.name(), "characteristic is not found");
         } else {
@@ -342,7 +348,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
         }
       }
     } catch (Exception e) {
-      Log.e(NAME, "unhandled exception: " + e.getMessage());
+      Log.e(Constants.LOG_TAG, "unhandled exception: " + e.getMessage());
       promise.reject(BleError.ERROR_GENERIC.name(), "unhandled exception: " + e.getMessage(), e);
     }
   }
@@ -350,7 +356,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   @ReactMethod
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void subscribe(String transactionId, String serviceUuid, String characteristicUuid, Promise promise) {
-    Log.d(NAME, String.format("subscribe(%s, %s, %s)", transactionId, serviceUuid, characteristicUuid));
+    Log.d(Constants.LOG_TAG, String.format("subscribe(%s, %s, %s)", transactionId, serviceUuid, characteristicUuid));
 
     setNotificationEnabled(promise, serviceUuid, characteristicUuid, true);
   }
@@ -358,7 +364,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   @ReactMethod
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   public void unsubscribe(String transactionId, String serviceUuid, String characteristicUuid, Promise promise) {
-    Log.d(NAME, String.format("unsubscribe(%s, %s, %s)", transactionId, serviceUuid, characteristicUuid));
+    Log.d(Constants.LOG_TAG, String.format("unsubscribe(%s, %s, %s)", transactionId, serviceUuid, characteristicUuid));
 
     setNotificationEnabled(promise, serviceUuid, characteristicUuid, false);
   }
@@ -366,11 +372,11 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
   // methods required for React Native NativeEventEmitter to work
   @ReactMethod
   public void addListener(String eventName) {
-    Log.i(NAME, String.format("listener registered for event: %s", eventName));
+    Log.i(Constants.LOG_TAG, String.format("listener registered for event: %s", eventName));
   }
 
   @ReactMethod
   public void removeListeners(Integer count) {
-    Log.i(NAME, String.format("%d listener removed", count));
+    Log.i(Constants.LOG_TAG, String.format("%d listener removed", count));
   }
 }
