@@ -142,14 +142,15 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
       promise.reject(BleError.ERROR_NOT_INITIALIZED.name(), "module is not initialized");
     } else {
       boolean isFilteringSupported = adapter.isOffloadedFilteringSupported();
-      boolean isBatchingSupported = adapter.isOffloadedScanBatchingSupported();
 
-      Log.i(Constants.LOG_TAG, String.format("starting scan filter supported %b batching supported %b", isFilteringSupported,
-          isBatchingSupported));
+      Log.i(Constants.LOG_TAG, String.format("starting scan filter supported %b", isFilteringSupported));
 
       List<ScanFilter> filters = null;
       ScanSettings.Builder settings = new ScanSettings.Builder();
 
+      settings.setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE);
+      settings.setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY);
+      settings.setReportDelay(0);
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isFilteringSupported && filterUuid != null
           && filterUuid.size() > 0) {
         settings.setCallbackType(ScanSettings.CALLBACK_TYPE_FIRST_MATCH | ScanSettings.CALLBACK_TYPE_MATCH_LOST);
@@ -162,10 +163,7 @@ public class BleLibraryModule extends ReactContextBaseJavaModule {
           filters.add(new ScanFilter.Builder().setServiceUuid(uuid).build());
         }
       } else {
-        // avoid flooding JS with events
-        if (isBatchingSupported) {
-          settings.setReportDelay(SCAN_REPORT_DELAY_MS);
-        }
+        settings.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES);
       }
 
       if (scanner == null) {
