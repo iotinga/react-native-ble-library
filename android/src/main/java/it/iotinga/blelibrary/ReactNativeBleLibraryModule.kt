@@ -18,6 +18,7 @@ class ReactNativeBleLibraryModule : Module() {
   private var adapter: BluetoothAdapter? = null
   private var scanner: RNBleScanner? = null
   private var bleActivationPromise: Promise? = null
+  private var logLevel: Int = Log.VERBOSE
 
   companion object {
     const val REQUEST_ENABLE_BT = 1
@@ -28,7 +29,7 @@ class ReactNativeBleLibraryModule : Module() {
       appContext.reactContext!!.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     adapter = bleManager.adapter
     manager =
-      RNBleManager(appContext.reactContext!!) { event, payload -> sendEvent(event.value, payload) }
+      RNBleManager(appContext.reactContext!!, logLevel) { event, payload -> sendEvent(event.value, payload) }
     scanner = RNBleScanner(bleManager.adapter) { event, payload -> sendEvent(event.value, payload) }
   }
 
@@ -50,6 +51,10 @@ class ReactNativeBleLibraryModule : Module() {
       Event.CHAR_VALUE_CHANGED.value,
       Event.CONNECTION_STATE_CHANGED.value
     )
+
+    Property("logLevel")
+      .get { logLevel }
+      .set { newValue: Int -> logLevel = newValue }
 
     AsyncFunction("initModule") { promise: Promise ->
       Log.d(LOG_TAG, "initModule()")

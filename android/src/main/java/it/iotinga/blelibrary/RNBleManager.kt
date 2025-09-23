@@ -20,14 +20,15 @@ private const val TIMEOUT_MS = 5_000L
 
 class RNBleManager(
   context: Context,
-  private val sendEvent: (event: Event, payload: Map<String, Any?>) -> Unit
+  private val logLevel: Int,
+  private val sendEvent: (event: Event, payload: Map<String, Any?>) -> Unit,
 ) : BleManager(context) {
   private val requestById = HashMap<String, TimeoutableRequest>()
   private var gatt: BluetoothGatt? = null
   private var mtu: Int? = null
 
   override fun getMinLogPriority(): Int {
-    return Log.VERBOSE
+    return logLevel
   }
 
   override fun log(priority: Int, message: String) {
@@ -118,7 +119,7 @@ class RNBleManager(
 
     if (isConnected) {
       disconnect()
-        .done { Log.i(LOG_TAG, "device disconnected") }
+        .done { log(Log.INFO, "device disconnected") }
         .before { emitConnectionStateChange(ConnectionState.DISCONNECTING, 0) }
         .fail { device, status ->
           Log.w(
@@ -137,11 +138,11 @@ class RNBleManager(
         emitConnectionStateChange(ConnectionState.CONNECTING_TO_DEVICE, BluetoothGatt.GATT_SUCCESS)
       }
       .done {
-        Log.i(LOG_TAG, "device connected")
+        log(Log.INFO, "device connected")
         promise.resolve()
       }
       .fail { device, status ->
-        Log.w(LOG_TAG, "error connecting device: $status")
+        log(Log.WARN, "error connecting device: $status")
         emitConnectionStateChange(ConnectionState.DISCONNECTED, status)
         promise.reject(
           BleError.ERROR_NOT_CONNECTED.name,
@@ -158,12 +159,12 @@ class RNBleManager(
         .timeout(5_000)
         .before { emitConnectionStateChange(ConnectionState.DISCONNECTING, 0) }
         .done {
-          Log.i(LOG_TAG, "Device disconnected")
+          log(Log.INFO, "Device disconnected")
           emitConnectionStateChange(ConnectionState.DISCONNECTED, 0)
           promise.resolve()
         }
         .fail { device, status ->
-          Log.w(LOG_TAG, "Error disconnecting device")
+          log(Log.WARN, "Error disconnecting device")
           promise.reject(BleError.ERROR_GATT.name, "Error disconnecting device: $status", null)
         }
         .enqueue()
@@ -175,11 +176,11 @@ class RNBleManager(
   fun getRSSI(promise: Promise) {
     readRssi()
       .with { device, rssi ->
-        Log.i(LOG_TAG, "Read RSSI $rssi")
+        log(Log.INFO, "Read RSSI $rssi")
         promise.resolve(rssi)
       }
       .fail { device, status ->
-        Log.w(LOG_TAG, "Error reading RSSI: $status")
+        log(Log.WARN, "Error reading RSSI: $status")
         promise.reject(BleError.ERROR_GATT.name, "Error reading RSSI: $status", null)
       }
       .enqueue()
@@ -219,7 +220,7 @@ class RNBleManager(
             promise.resolve(Base64.encode(data.value, Base64.DEFAULT))
           }
           .fail { device, status ->
-            Log.w(LOG_TAG, "Error reading characteristic: $status")
+            log(Log.WARN, "Error reading characteristic: $status")
             promise.reject(BleError.ERROR_GATT.name, "Error reading characteristic: $status", null)
           }
       )
@@ -231,10 +232,10 @@ class RNBleManager(
     characteristic: BluetoothGattCharacteristic,
     promise: Promise
   ) {
-    Log.i(LOG_TAG, "Enabling notifications for char ${characteristic.uuid}")
+    log(Log.INFO, "Enabling notifications for char ${characteristic.uuid}")
     setNotificationCallback(characteristic)
       .with { device, data ->
-        Log.d(LOG_TAG, "Notification received for char ${characteristic.uuid} ${data.size()}")
+        log(Log.VERBOSE, "Notification received for char ${characteristic.uuid} ${data.size()}")
         sendEvent(
           Event.CHAR_VALUE_CHANGED, mapOf(
             "service" to characteristic.service.uuid.toString(),
@@ -248,12 +249,12 @@ class RNBleManager(
     enqueue(
       transactionId, enableNotifications(characteristic)
         .done {
-          Log.d(LOG_TAG, "Notifications successfully enabled")
+          log(Log.VERBOSE, "Notifications successfully enabled")
 
           promise.resolve()
         }
         .fail { device, status ->
-          Log.w(LOG_TAG, "Error enabling notifications: $status")
+          log(Log.WARN, "Error enabling notifications: $status")
           promise.reject(
             BleError.ERROR_GATT.name,
             "Error enabling notifications: $status",
@@ -268,17 +269,17 @@ class RNBleManager(
     characteristic: BluetoothGattCharacteristic,
     promise: Promise
   ) {
-    Log.i(LOG_TAG, "Disabling notifications for char ${characteristic.uuid}")
+    log(Log.INFO, "Disabling notifications for char ${characteristic.uuid}")
 
     removeNotificationCallback(characteristic)
     enqueue(
       transactionId, disableNotifications(characteristic)
         .done {
-          Log.d(LOG_TAG, "Notifications successfully disabled")
+          log(Log.VERBOSE, "Notifications successfully disabled")
           promise.resolve()
         }
         .fail { device, status ->
-          Log.w(LOG_TAG, "Error enabling notifications: $status")
+          log(Log.WARN, "Error enabling notifications: $status")
           promise.reject(
             BleError.ERROR_GATT.name,
             "Error enabling notifications: $status",
@@ -293,11 +294,11 @@ class RNBleManager(
     characteristic: BluetoothGattCharacteristic,
     promise: Promise
   ) {
-    Log.i(LOG_TAG, "Enabling indications for char ${characteristic.uuid}")
+    log(Log.INFO, "Enabling indications for char ${characteristic.uuid}")
 
     setIndicationCallback(characteristic)
       .with { device, data ->
-        Log.d(LOG_TAG, "Indication received for char ${characteristic.uuid} ${data.size()}")
+        log(Log.VERBOSE, "Indication received for char ${characteristic.uuid} ${data.size()}")
         sendEvent(
           Event.CHAR_VALUE_CHANGED, mapOf(
             "service" to characteristic.service.uuid.toString(),
@@ -310,11 +311,11 @@ class RNBleManager(
     enqueue(
       transactionId, enableIndications(characteristic)
         .done {
-          Log.d(LOG_TAG, "Indications successfully enabled")
+          log(Log.VERBOSE, "Indications successfully enabled")
           promise.resolve()
         }
         .fail { device, status ->
-          Log.w(LOG_TAG, "Error enabling notifications: $status")
+          log(Log.WARN, "Error enabling notifications: $status")
           promise.reject(
             BleError.ERROR_GATT.name,
             "Error enabling notifications: $status",
@@ -329,17 +330,17 @@ class RNBleManager(
     characteristic: BluetoothGattCharacteristic,
     promise: Promise
   ) {
-    Log.i(LOG_TAG, "Disabling indications for char ${characteristic.uuid}")
+    log(Log.INFO, "Disabling indications for char ${characteristic.uuid}")
 
     removeIndicationCallback(characteristic)
     enqueue(
       transactionId, disableIndications(characteristic)
         .done {
-          Log.d(LOG_TAG, "indications successfully disabled")
+          log(Log.VERBOSE, "indications successfully disabled")
           promise.resolve()
         }
         .fail { device, status ->
-          Log.w(LOG_TAG, "Error enabling notifications: $status")
+          log(Log.WARN, "Error enabling notifications: $status")
           promise.reject(
             BleError.ERROR_GATT.name,
             "Error enabling notifications: $status",
@@ -383,6 +384,7 @@ class RNBleManager(
       } else if (characteristic.supportsIndication()) {
         disableIndication(transactionId, characteristic, promise)
       } else {
+        log(Log.WARN, "Characteristic ${characteristic.uuid} doesn't support indication or notification")
         promise.reject(
           BleError.ERROR_INVALID_ARGUMENTS.name,
           "Characteristic does not support notification or indication",
@@ -408,9 +410,10 @@ class RNBleManager(
           BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         )
           .split({ message, index, maxLength ->
-            message.slice((index * chunkSize..min((index + 1) * chunkSize - 1, message.size)))
+            message.slice((index * chunkSize..min((index + 1) * chunkSize, message.size) - 1))
               .toByteArray()
           }) { device, data, index ->
+            log(Log.VERBOSE, "Wrote chunk ${index} of ${data?.size} bytes")
             written += data?.size ?: 0
             sendEvent(
               Event.PROGRESS, mapOf(
@@ -423,7 +426,11 @@ class RNBleManager(
             )
           }
           .done {
+            log(Log.WARN, "Successfully wrote to char ${characteristic.uuid}")
             promise.resolve()
+          }
+          .fail { device, status ->
+            log(Log.WARN, "Error writing to char ${characteristic.uuid}: $status")
           }
       )
     }
