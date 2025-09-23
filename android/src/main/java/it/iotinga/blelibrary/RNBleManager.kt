@@ -201,56 +201,154 @@ class RNBleManager(
     }
   }
 
-  fun enableNotification(
+  private fun enableNotification(
+    transactionId: String,
+    characteristic: BluetoothGattCharacteristic,
+    promise: Promise
+  ) {
+    setNotificationCallback(characteristic)
+      .with { device, data ->
+        sendEvent(
+          Event.CHAR_VALUE_CHANGED, mapOf(
+            "service" to characteristic.service.uuid.toString(),
+            "characteristic" to characteristic.uuid.toString(),
+            "value" to Base64.encodeToString(data.value, Base64.DEFAULT),
+          )
+        )
+      }
+
+    enqueue(
+      transactionId, enableNotifications(characteristic)
+        .done {
+          promise.resolve()
+        }
+        .fail { device, status ->
+          Log.w(LOG_TAG, "Error enabling notifications: $status")
+          promise.reject(
+            BleError.ERROR_GATT.name,
+            "Error enabling notifications: $status",
+            null
+          )
+        }
+    )
+  }
+
+  private fun disableNotification(
+    transactionId: String,
+    characteristic: BluetoothGattCharacteristic,
+    promise: Promise
+  ) {
+    removeNotificationCallback(characteristic)
+    enqueue(
+      transactionId, disableNotifications(characteristic)
+        .done {
+          promise.resolve()
+        }
+        .fail { device, status ->
+          Log.w(LOG_TAG, "Error enabling notifications: $status")
+          promise.reject(
+            BleError.ERROR_GATT.name,
+            "Error enabling notifications: $status",
+            null
+          )
+        }
+    )
+  }
+
+  private fun enableIndication(
+    transactionId: String,
+    characteristic: BluetoothGattCharacteristic,
+    promise: Promise
+  ) {
+    setIndicationCallback(characteristic)
+      .with { device, data ->
+        sendEvent(
+          Event.CHAR_VALUE_CHANGED, mapOf(
+            "service" to characteristic.service.uuid.toString(),
+            "characteristic" to characteristic.uuid.toString(),
+            "value" to Base64.encodeToString(data.value, Base64.DEFAULT),
+          )
+        )
+      }
+
+    enqueue(
+      transactionId, enableIndications(characteristic)
+        .done {
+          promise.resolve()
+        }
+        .fail { device, status ->
+          Log.w(LOG_TAG, "Error enabling notifications: $status")
+          promise.reject(
+            BleError.ERROR_GATT.name,
+            "Error enabling notifications: $status",
+            null
+          )
+        }
+    )
+  }
+
+  private fun disableIndication(
+    transactionId: String,
+    characteristic: BluetoothGattCharacteristic,
+    promise: Promise
+  ) {
+    removeIndicationCallback(characteristic)
+    enqueue(
+      transactionId, disableIndications(characteristic)
+        .done {
+          promise.resolve()
+        }
+        .fail { device, status ->
+          Log.w(LOG_TAG, "Error enabling notifications: $status")
+          promise.reject(
+            BleError.ERROR_GATT.name,
+            "Error enabling notifications: $status",
+            null
+          )
+        }
+    )
+  }
+
+
+  fun enableIndicationOrNotification(
     transactionId: String,
     service: String,
     characteristic: String,
     promise: Promise
   ) {
-
     findCharacteristic(promise, service, characteristic) { characteristic ->
-      setNotificationCallback(characteristic)
-        .with { device, data ->
-          sendEvent(
-            Event.CHAR_VALUE_CHANGED, mapOf(
-              "service" to characteristic.service.uuid.toString(),
-              "characteristic" to characteristic.uuid.toString(),
-              "value" to Base64.encodeToString(data.value, Base64.DEFAULT),
-            )
-          )
-        }
-
-      enqueue(
-        transactionId, enableNotifications(characteristic)
-          .done {
-            promise.resolve()
-          }
-          .fail { device, status ->
-            Log.w(LOG_TAG, "Error enabling notifications: $status")
-            promise.reject(BleError.ERROR_GATT.name, "Error enabling notifications: $status", null)
-          }
-      )
+      if (characteristic.supportsNotification()) {
+        enableNotification(transactionId, characteristic, promise)
+      } else if (characteristic.supportsIndication()) {
+        enableIndication(transactionId, characteristic, promise)
+      } else {
+        promise.reject(
+          BleError.ERROR_INVALID_ARGUMENTS.name,
+          "Characteristic does not support notification or indication",
+          null
+        )
+      }
     }
   }
 
-  fun disableNotification(
+  fun disableIndicationOrNotification(
     transactionId: String,
     service: String,
     characteristic: String,
     promise: Promise
   ) {
     findCharacteristic(promise, service, characteristic) { characteristic ->
-      removeNotificationCallback(characteristic)
-      enqueue(
-        transactionId, disableNotifications(characteristic)
-          .done {
-            promise.resolve()
-          }
-          .fail { device, status ->
-            Log.w(LOG_TAG, "Error enabling notifications: $status")
-            promise.reject(BleError.ERROR_GATT.name, "Error enabling notifications: $status", null)
-          }
-      )
+      if (characteristic.supportsNotification()) {
+        disableNotification(transactionId, characteristic, promise)
+      } else if (characteristic.supportsIndication()) {
+        disableIndication(transactionId, characteristic, promise)
+      } else {
+        promise.reject(
+          BleError.ERROR_INVALID_ARGUMENTS.name,
+          "Characteristic does not support notification or indication",
+          null
+        )
+      }
     }
   }
 
@@ -348,7 +446,6 @@ class RNBleManager(
               )
             )
 
-
             if (toWrite.available() > 0) {
               writeCharRecursive(
                 transactionId,
@@ -435,4 +532,12 @@ fun bleUuidFromString(uuid: String): UUID? {
   }
 
   return UUID.fromString(result)
+}
+
+fun BluetoothGattCharacteristic.supportsIndication(): Boolean {
+  return (BluetoothGattCharacteristic.PROPERTY_INDICATE and properties) != 0
+}
+
+fun BluetoothGattCharacteristic.supportsNotification(): Boolean {
+  return (BluetoothGattCharacteristic.PROPERTY_NOTIFY and properties) != 0
 }

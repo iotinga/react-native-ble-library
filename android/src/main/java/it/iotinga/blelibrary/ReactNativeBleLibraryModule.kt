@@ -83,11 +83,11 @@ class ReactNativeBleLibraryModule : Module() {
             Log.i(LOG_TAG, "checking if BLE is active")
 
             if (adapter!!.isEnabled) {
-              Log.i(LOG_TAG, "BLE is active");
+              Log.i(LOG_TAG, "BLE is active")
               onBleReady()
-              promise.resolve();
+              promise.resolve()
             } else {
-              Log.i(LOG_TAG, "asking user to turn BLE on");
+              Log.i(LOG_TAG, "asking user to turn BLE on")
 
               val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
               appContext.currentActivity!!.startActivityForResult(
@@ -108,7 +108,7 @@ class ReactNativeBleLibraryModule : Module() {
       if (onActivityResultPayload.requestCode == REQUEST_ENABLE_BT && activationPromise != null) {
         if (onActivityResultPayload.resultCode == Activity.RESULT_OK) {
           onBleReady()
-          activationPromise.resolve();
+          activationPromise.resolve()
         } else {
           activationPromise.reject(
             BleError.ERROR_BLE_NOT_ENABLED.name,
@@ -263,7 +263,7 @@ class ReactNativeBleLibraryModule : Module() {
       )
 
       ensureManagerInitialized(promise) { manager ->
-        manager.enableNotification(transactionId, serviceUuid, characteristicUuid, promise)
+        manager.enableIndicationOrNotification(transactionId, serviceUuid, characteristicUuid, promise)
       }
     }
 
@@ -279,7 +279,7 @@ class ReactNativeBleLibraryModule : Module() {
       )
 
       ensureManagerInitialized(promise) { manager ->
-        manager.disableNotification(transactionId, serviceUuid, characteristicUuid, promise)
+        manager.disableIndicationOrNotification(transactionId, serviceUuid, characteristicUuid, promise)
       }
     }
   }
