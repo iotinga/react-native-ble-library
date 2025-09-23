@@ -1,5 +1,5 @@
 {
-  "name": "react-native-ble-library",
+  "name": "@iotinga/react-native-ble-library",
   "version": "0.1.0",
   "description": "Allows connection to BLE devices",
   "main": "build/index.js",
