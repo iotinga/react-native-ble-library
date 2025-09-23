@@ -10,6 +10,7 @@ import android.util.Log
 import expo.modules.kotlin.Promise
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.TimeoutableRequest
+import no.nordicsemi.android.ble.observer.ConnectionObserver
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.min
@@ -27,6 +28,41 @@ class RNBleManager(
   private val requestById = HashMap<String, TimeoutableRequest>()
   private var gatt: BluetoothGatt? = null
   private var mtu: Int? = null
+
+  init {
+    connectionObserver = object: ConnectionObserver {
+      override fun onDeviceConnecting(device: BluetoothDevice) {
+        log(Log.INFO, "device connecting")
+        emitConnectionStateChange(ConnectionState.CONNECTING_TO_DEVICE, 0)
+      }
+
+      override fun onDeviceConnected(device: BluetoothDevice) {
+        emitConnectionStateChange(ConnectionState.DISCOVERING_SERVICES, 0)
+      }
+
+      override fun onDeviceFailedToConnect(
+        device: BluetoothDevice,
+        reason: Int
+      ) {
+        emitConnectionStateChange(ConnectionState.DISCONNECTED, reason)
+      }
+
+      override fun onDeviceReady(device: BluetoothDevice) {
+        emitConnectionStateChange(ConnectionState.CONNECTED, 0)
+      }
+
+      override fun onDeviceDisconnecting(device: BluetoothDevice) {
+        emitConnectionStateChange(ConnectionState.DISCONNECTING, 0)
+      }
+
+      override fun onDeviceDisconnected(
+        device: BluetoothDevice,
+        reason: Int
+      ) {
+        emitConnectionStateChange(ConnectionState.DISCONNECTED, reason)
+      }
+    }
+  }
 
   override fun getMinLogPriority(): Int {
     return logLevel
@@ -70,31 +106,21 @@ class RNBleManager(
     val mtu = mtu
     if (mtu != null) {
       requestMtu(mtu)
-        .before {
-          emitConnectionStateChange(
-            ConnectionState.REQUESTING_MTU,
-            BluetoothGatt.GATT_SUCCESS,
-          )
+        .fail { device, status ->
+          log(Log.WARN, "Error requesting MTU: $status")
+        }
+        .done {
+          log(Log.INFO, "MTU correctly exchanged")
         }
         .enqueue()
     }
   }
 
-  override fun onDeviceReady() {
-    emitConnectionStateChange(ConnectionState.CONNECTED, 0)
-  }
-
   override fun onServicesInvalidated() {
-    emitConnectionStateChange(ConnectionState.DISCONNECTED, 0)
     gatt = null
   }
 
   override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
-    emitConnectionStateChange(
-      ConnectionState.DISCOVERING_SERVICES,
-      BluetoothGatt.GATT_SUCCESS,
-    )
-
     this.gatt = gatt
 
     return true
@@ -120,7 +146,6 @@ class RNBleManager(
     if (isConnected) {
       disconnect()
         .done { log(Log.INFO, "device disconnected") }
-        .before { emitConnectionStateChange(ConnectionState.DISCONNECTING, 0) }
         .fail { device, status ->
           Log.w(
             LOG_TAG,
@@ -135,16 +160,12 @@ class RNBleManager(
       .retry(3)
       .timeout(TIMEOUT_MS)
       .useAutoConnect(false)
-      .before {
-        emitConnectionStateChange(ConnectionState.CONNECTING_TO_DEVICE, BluetoothGatt.GATT_SUCCESS)
-      }
       .done {
         log(Log.INFO, "device connected")
         promise.resolve()
       }
       .fail { device, status ->
         log(Log.WARN, "error connecting device: $status")
-        emitConnectionStateChange(ConnectionState.DISCONNECTED, status)
         promise.reject(
           BleError.ERROR_NOT_CONNECTED.name,
           "error connecting to device status: $status",
@@ -158,10 +179,8 @@ class RNBleManager(
     if (isConnected) {
       disconnect()
         .timeout(5_000)
-        .before { emitConnectionStateChange(ConnectionState.DISCONNECTING, 0) }
         .done {
           log(Log.INFO, "Device disconnected")
-          emitConnectionStateChange(ConnectionState.DISCONNECTED, 0)
           promise.resolve()
         }
         .fail { device, status ->
