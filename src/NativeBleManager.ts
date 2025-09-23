@@ -145,7 +145,7 @@ export class NativeBleManager implements BleManager {
     this.connectedDevice = null
 
     try {
-      await ReactNativeBleLibraryModule.connect(id, mtu ?? 0)
+      await ReactNativeBleLibraryModule.connect(id, mtu ?? 0, options)
 
       this.logger?.debug(`[BleManager] starting connection to ${id}`)
 
