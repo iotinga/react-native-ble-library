@@ -22,15 +22,15 @@ private const val PROGRESS_SEND_INTERVAL_MS = 500L
 
 class RNBleManager(
   context: Context,
-  private val logLevel: Int,
   private val sendEvent: (event: Event, payload: Map<String, Any?>) -> Unit,
 ) : BleManager(context) {
   private val requestById = HashMap<String, TimeoutableRequest>()
   private var gatt: BluetoothGatt? = null
   private var mtu: Int? = null
+  private var logLevel = Log.DEBUG
 
   init {
-    connectionObserver = object: ConnectionObserver {
+    connectionObserver = object : ConnectionObserver {
       override fun onDeviceConnecting(device: BluetoothDevice) {
         log(Log.INFO, "device connecting")
         emitConnectionStateChange(ConnectionState.CONNECTING_TO_DEVICE, 0)
@@ -140,7 +140,7 @@ class RNBleManager(
     requestById[transactionId]?.cancel()
   }
 
-  fun connect(device: BluetoothDevice, mtu: Int, promise: Promise) {
+  fun connect(device: BluetoothDevice, mtu: Int, options: Map<String, Any>?, promise: Promise) {
     this.mtu = mtu
 
     if (isConnected) {
@@ -156,7 +156,7 @@ class RNBleManager(
         .enqueue()
     }
 
-    connect(device)
+    val request = connect(device)
       .retry(3)
       .timeout(TIMEOUT_MS)
       .useAutoConnect(false)
@@ -172,7 +172,18 @@ class RNBleManager(
           null
         )
       }
-      .enqueue()
+
+    if (options?.contains("timeout") == true) {
+      request.timeout(options["timeout"] as Long)
+    }
+    if (options?.contains("preferredPhy") == true) {
+      request.usePreferredPhy(options["preferredPhy"] as Int)
+    }
+    if (options?.contains("logLevel") == true) {
+      logLevel = options["logLevel"] as Int
+    }
+
+    request.enqueue()
   }
 
   fun disconnect(promise: Promise) {
@@ -477,7 +488,11 @@ class RNBleManager(
           }
           .fail { device, status ->
             log(Log.WARN, "Error writing to char ${characteristic.uuid}: $status")
-            promise.reject(BleError.ERROR_GATT.name, "Error writing to char ${characteristic.uuid}: $status", null)
+            promise.reject(
+              BleError.ERROR_GATT.name,
+              "Error writing to char ${characteristic.uuid}: $status",
+              null
+            )
           }
       )
     }

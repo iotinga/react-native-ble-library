@@ -1,33 +1,59 @@
-import type { BleError } from "./BleError";
-import type { EventSubscription } from "expo-modules-core";
+import type { BleError } from './BleError'
+import type { EventSubscription } from 'expo-modules-core'
 
 export type BleDeviceInfo = {
   /** ID of the device. On Android this is a MAC address, on iOS it's an opaque UUID */
-  id: string;
+  id: string
 
   /** Name of the device, as seen from the library */
-  name: string;
+  name: string
 
   /** Signal strength of the discovered device */
-  rssi: number;
+  rssi: number
 
   /** true if the device is available, false if device is no longer available (Android only) */
-  isAvailable: boolean;
+  isAvailable: boolean
 
   /** true if the device is connectable */
-  isConnectable: boolean;
+  isConnectable: boolean
 
   /** tx power of the device */
-  txPower: number;
-};
+  txPower: number
+}
+
+export enum LogLevel {
+  VERBOSE = 2,
+  DEBUG = 3,
+  INFO = 4,
+  WARN = 5,
+  ERROR = 6,
+  ASSERT = 7,
+}
+
+export const PreferredPhy = {
+  PHY_LE_1M_MASK: 1,
+  PHY_LE_2M_MASK: 2,
+  PHY_LE_CODED_MASK: 4,
+} as const
+
+export type ConnectOptions = {
+  /** log level to use: see Android library for values. Android only */
+  logLevel?: LogLevel
+
+  /** phy that is preferred to use (bitmask of values PreferredPhy). Android only */
+  preferredPhy?: number
+
+  /** timeout for the connection, in ms. Android only */
+  timeout?: number
+}
 
 export enum ConnectionState {
-  CONNECTING_TO_DEVICE = "CONNECTING_TO_DEVICE",
-  REQUESTING_MTU = "REQUESTING_MTU",
-  DISCOVERING_SERVICES = "DISCOVERING_SERVICES",
-  CONNECTED = "CONNECTED",
-  DISCONNECTING = "DISCONNECTING",
-  DISCONNECTED = "DISCONNECTED",
+  CONNECTING_TO_DEVICE = 'CONNECTING_TO_DEVICE',
+  REQUESTING_MTU = 'REQUESTING_MTU',
+  DISCOVERING_SERVICES = 'DISCOVERING_SERVICES',
+  CONNECTED = 'CONNECTED',
+  DISCONNECTING = 'DISCONNECTING',
+  DISCONNECTED = 'DISCONNECTED',
 }
 
 export const BleCharacteristicProperty = {
@@ -36,41 +62,41 @@ export const BleCharacteristicProperty = {
   WRITE: 0x08,
   NOTIFY: 0x10,
   INDICATE: 0x20,
-} as const;
+} as const
 
 export type BleCharacteristicInfo = {
   /** uuid of the characteristic */
-  uuid: string;
+  uuid: string
 
   /** bitmask of {@link BleCharacteristicProperty} */
-  properties: number;
-};
+  properties: number
+}
 
 export type BleServiceInfo = {
   /** uuid of the service */
-  uuid: string;
+  uuid: string
 
   /** true if the service is a primary service */
-  isPrimary: boolean;
+  isPrimary: boolean
 
   /** list of the characteristics included in this service */
-  characteristics: BleCharacteristicInfo[];
-};
+  characteristics: BleCharacteristicInfo[]
+}
 
 export type BleServicesInfo = {
-  services: BleServiceInfo[];
-};
+  services: BleServiceInfo[]
+}
 
 export type BleConnectedDeviceInfo = {
   /** ID of the device */
-  id: string;
+  id: string
 
   /** connection state */
-  connectionState: ConnectionState;
+  connectionState: ConnectionState
 
   /** list of services exposed from the device */
-  services?: BleServiceInfo[];
-};
+  services?: BleServiceInfo[]
+}
 
 export interface BleManager {
   /**
@@ -82,7 +108,7 @@ export interface BleManager {
    *
    * @throws {BleError} in case of an error
    */
-  init(): Promise<void>;
+  init(): Promise<void>
 
   /**
    * Start a BLE scan for the devices that expose the specified services.
@@ -97,7 +123,7 @@ export interface BleManager {
     serviceUuid: string[],
     onDiscover: (devices: BleDeviceInfo[]) => void,
     onError?: (error: BleError) => void
-  ): EventSubscription;
+  ): EventSubscription
 
   /**
    * Connects to the device with the specified id (that is returned by the scan).
@@ -113,9 +139,10 @@ export interface BleManager {
    * @param id id of the device to connect to. Should correspond to one device found in a previous scan!
    * @param mtu the MTU to set to the device when connecting. This is only relevant on Android,
    *  since on iOS the MTU is negotiated automatically. If not specified uses the default from the BLE driver.
+   * @param options optional connection options
    * @throws {BleError} in case of an error
    */
-  connect(id: string, mtu?: number): Promise<void>;
+  connect(id: string, mtu?: number, options?: ConnectOptions): Promise<void>
 
   /**
    * Set a callback to be invoked each time the device connection information changes
@@ -123,14 +150,12 @@ export interface BleManager {
    * @param callback callback to invoke
    * @returns a subscription for the event
    */
-  onConnectionStateChanged(
-    callback: (state: ConnectionState, error: BleError | null) => void
-  ): EventSubscription;
+  onConnectionStateChanged(callback: (state: ConnectionState, error: BleError | null) => void): EventSubscription
 
   /**
    * @return the connected device info if any, otherwise null
    */
-  get device(): BleConnectedDeviceInfo | null;
+  get device(): BleConnectedDeviceInfo | null
 
   /**
    * Disconnects a previously connected device, if any.
@@ -138,7 +163,7 @@ export interface BleManager {
    *
    * @throws {BleError} in case of an error
    */
-  disconnect(): Promise<void>;
+  disconnect(): Promise<void>
 
   /**
    * Request a read for the specified characteristics. If the characteristic has a
@@ -159,7 +184,7 @@ export interface BleManager {
     size?: number,
     progress?: (current: number, total: number) => void,
     abortSignal?: AbortSignal
-  ): Promise<Uint8Array>;
+  ): Promise<Uint8Array>
 
   /**
    * Requests a write for the specified characteristic. If the characteristic is chunked the
@@ -184,7 +209,7 @@ export interface BleManager {
     chunkSize?: number,
     progress?: (current: number, total: number) => void,
     abortSignal?: AbortSignal
-  ): Promise<void>;
+  ): Promise<void>
 
   /**
    * get the connected device RSSI
@@ -192,7 +217,7 @@ export interface BleManager {
    * @returns the RSSI value for the device
    * @throws {BleError} in case of an error
    */
-  getRSSI(): Promise<number>;
+  getRSSI(): Promise<number>
 
   /**
    * Subscribes for notification of the specified (service, characteristic). Each time the
@@ -210,27 +235,27 @@ export interface BleManager {
     characteristic: string,
     onValueChanged: (value: Uint8Array) => void,
     onError?: (error: BleError) => void
-  ): EventSubscription;
+  ): EventSubscription
 
   /**
    * Call this method after having used the BleManager to release all the resources.
    * Eventual connected devices will be disconnected and existing scan stopped.
    * After this call do not attempt to use the BleManager instance without calling init() again!
    */
-  dispose(): void;
+  dispose(): void
 }
 
 export type DemoState = {
   /** services exposed by the device */
-  services: BleServiceInfo[];
+  services: BleServiceInfo[]
 
   /** devices returned in fake discovery */
-  devices: BleDeviceInfo[];
-};
+  devices: BleDeviceInfo[]
+}
 
 export interface ILogger {
-  debug(message: string, ...args: unknown[]): void;
-  info(message: string, ...args: unknown[]): void;
-  warn(message: string, ...args: unknown[]): void;
-  error(message: string, ...args: unknown[]): void;
+  debug(message: string, ...args: unknown[]): void
+  info(message: string, ...args: unknown[]): void
+  warn(message: string, ...args: unknown[]): void
+  error(message: string, ...args: unknown[]): void
 }
