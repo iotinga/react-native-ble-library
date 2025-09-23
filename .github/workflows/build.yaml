@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
           scope: '@iotinga'
 
@@ -28,11 +28,7 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
 
-      - name: Copy readme file to package directory (npm doesn't support symlinks!)
-        run: cp README.md library/
-
       - name: Bump version
-        working-directory: library/
         run: npm version ${{ steps.version.outputs.new_tag }}
 
       - name: Commit new version
@@ -40,23 +36,20 @@ jobs:
         run: git commit -am "[CI] bump version to $IOTINGA_VERSION" && git push
 
       - name: Install dependencies
-        working-directory: library/
         run: npm ci
 
       - name: Publish npm package
         run: npm publish --access public
-        working-directory: library/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '22'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@iotinga'
 
       - name: Publish npm package (on private registry)
         run: npm publish
-        working-directory: library/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
