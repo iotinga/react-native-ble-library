@@ -8,6 +8,7 @@ import android.content.Context
 import android.util.Base64
 import android.util.Log
 import expo.modules.kotlin.Promise
+import kotlinx.coroutines.flow.callbackFlow
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.TimeoutableRequest
 import java.io.ByteArrayInputStream
@@ -29,11 +30,14 @@ class RNBleManager(
   private var gatt: BluetoothGatt? = null
   private var mtu: Int? = null
 
+  override fun getMinLogPriority(): Int {
+    return Log.VERBOSE
+  }
+
   private fun emitConnectionStateChange(
     state: ConnectionState,
     gattStatus: Int,
   ) {
-
     sendEvent(
       Event.CONNECTION_STATE_CHANGED, mapOf(
         "state" to state.name,
@@ -57,7 +61,6 @@ class RNBleManager(
       )
     )
   }
-
 
   override fun initialize() {
     requestById.clear()
