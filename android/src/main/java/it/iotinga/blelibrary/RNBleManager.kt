@@ -176,12 +176,15 @@ class RNBleManager(
       }
 
     if (options?.contains("timeout") == true) {
+      log(Log.DEBUG, "set timeout to ${options["timeout"]}")
       request.timeout(options["timeout"] as Long)
     }
     if (options?.contains("preferredPhy") == true) {
+      log(Log.DEBUG, "set preferredPhy to ${options["preferredPhy"]}")
       request.usePreferredPhy(options["preferredPhy"] as Int)
     }
     if (options?.contains("logLevel") == true) {
+      log(Log.DEBUG, "set logLevel to ${options["logLevel"]}")
       logLevel = options["logLevel"] as Int
     }
 

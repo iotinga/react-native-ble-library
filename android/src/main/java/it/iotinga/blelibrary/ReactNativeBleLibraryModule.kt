@@ -175,7 +175,7 @@ class ReactNativeBleLibraryModule : Module() {
 
     AsyncFunction("connect")
     { id: String, mtu: Int, options: Map<String, Any>?, promise: Promise ->
-      Log.d(LOG_TAG, "connect($id, $mtu)")
+      Log.d(LOG_TAG, "connect($id, $mtu, $options)")
 
       val isAddressValid = BluetoothAdapter.checkBluetoothAddress(id)
       if (!isAddressValid) {
