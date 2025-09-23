@@ -17,7 +17,7 @@ import kotlin.math.min
 private const val STANDARD_UUID_SUFFIX = "-0000-1000-8000-00805F9B34FB"
 private const val EOF_BYTE = 0xff.toByte()
 private const val TIMEOUT_MS = 5_000L
-private const val PROGRESS_SEND_INTERVAL_MS = 1_000L
+private const val PROGRESS_SEND_INTERVAL_MS = 500L
 
 class RNBleManager(
   context: Context,
