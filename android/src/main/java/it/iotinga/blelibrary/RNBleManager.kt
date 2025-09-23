@@ -206,8 +206,10 @@ class RNBleManager(
     characteristic: BluetoothGattCharacteristic,
     promise: Promise
   ) {
+    Log.i(LOG_TAG, "Enabling notifications for char ${characteristic.uuid}")
     setNotificationCallback(characteristic)
       .with { device, data ->
+        Log.d(LOG_TAG, "Notification received for char ${characteristic.uuid} ${data.size()}")
         sendEvent(
           Event.CHAR_VALUE_CHANGED, mapOf(
             "service" to characteristic.service.uuid.toString(),
@@ -217,9 +219,12 @@ class RNBleManager(
         )
       }
 
+
     enqueue(
       transactionId, enableNotifications(characteristic)
         .done {
+          Log.d(LOG_TAG, "Notifications successfully enabled")
+
           promise.resolve()
         }
         .fail { device, status ->
@@ -238,10 +243,13 @@ class RNBleManager(
     characteristic: BluetoothGattCharacteristic,
     promise: Promise
   ) {
+    Log.i(LOG_TAG, "Disabling notifications for char ${characteristic.uuid}")
+
     removeNotificationCallback(characteristic)
     enqueue(
       transactionId, disableNotifications(characteristic)
         .done {
+          Log.d(LOG_TAG, "Notifications successfully disabled")
           promise.resolve()
         }
         .fail { device, status ->
@@ -260,8 +268,11 @@ class RNBleManager(
     characteristic: BluetoothGattCharacteristic,
     promise: Promise
   ) {
+    Log.i(LOG_TAG, "Enabling indications for char ${characteristic.uuid}")
+
     setIndicationCallback(characteristic)
       .with { device, data ->
+        Log.d(LOG_TAG, "Indication received for char ${characteristic.uuid} ${data.size()}")
         sendEvent(
           Event.CHAR_VALUE_CHANGED, mapOf(
             "service" to characteristic.service.uuid.toString(),
@@ -274,6 +285,7 @@ class RNBleManager(
     enqueue(
       transactionId, enableIndications(characteristic)
         .done {
+          Log.d(LOG_TAG, "Indications successfully enabled")
           promise.resolve()
         }
         .fail { device, status ->
@@ -292,10 +304,13 @@ class RNBleManager(
     characteristic: BluetoothGattCharacteristic,
     promise: Promise
   ) {
+    Log.i(LOG_TAG, "Disabling indications for char ${characteristic.uuid}")
+
     removeIndicationCallback(characteristic)
     enqueue(
       transactionId, disableIndications(characteristic)
         .done {
+          Log.d(LOG_TAG, "indications successfully disabled")
           promise.resolve()
         }
         .fail { device, status ->
