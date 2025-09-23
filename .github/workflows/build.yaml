@@ -20,6 +20,11 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           scope: '@iotinga'
 
+      - name: Config git
+        run: |
+          git config --global user.name iotinga-devops
+          git config --global user.email devops@iotinga.it
+
       - name: Bump version and push tag
         uses: anothrNick/github-tag-action@1.64.0
         id: version
