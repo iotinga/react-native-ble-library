@@ -458,6 +458,7 @@ class RNBleManager(
           }
           .fail { device, status ->
             log(Log.WARN, "Error writing to char ${characteristic.uuid}: $status")
+            promise.reject(BleError.ERROR_GATT.name, "Error writing to char ${characteristic.uuid}: $status", null)
           }
       )
     }
