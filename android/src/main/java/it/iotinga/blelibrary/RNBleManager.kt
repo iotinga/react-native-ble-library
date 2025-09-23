@@ -103,7 +103,6 @@ class RNBleManager(
     requestById[transactionId] = request
 
     request
-      .timeout(TIMEOUT_MS)
       .then {
         requestById.remove(transactionId)
       }
@@ -127,6 +126,7 @@ class RNBleManager(
             "error disconnecting device: $status"
           )
         }
+        .timeout(TIMEOUT_MS)
         .enqueue()
     }
 
@@ -167,6 +167,7 @@ class RNBleManager(
           log(Log.WARN, "Error disconnecting device")
           promise.reject(BleError.ERROR_GATT.name, "Error disconnecting device: $status", null)
         }
+        .timeout(TIMEOUT_MS)
         .enqueue()
     } else {
       promise.resolve(null)
@@ -261,6 +262,7 @@ class RNBleManager(
             null
           )
         }
+        .timeout(TIMEOUT_MS)
     )
   }
 
@@ -286,6 +288,7 @@ class RNBleManager(
             null
           )
         }
+        .timeout(TIMEOUT_MS)
     )
   }
 
@@ -322,6 +325,7 @@ class RNBleManager(
             null
           )
         }
+        .timeout(TIMEOUT_MS)
     )
   }
 
@@ -347,6 +351,7 @@ class RNBleManager(
             null
           )
         }
+        .timeout(TIMEOUT_MS)
     )
   }
 
