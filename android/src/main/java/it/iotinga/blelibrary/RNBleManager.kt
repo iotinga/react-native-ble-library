@@ -8,11 +8,8 @@ import android.content.Context
 import android.util.Base64
 import android.util.Log
 import expo.modules.kotlin.Promise
-import kotlinx.coroutines.flow.callbackFlow
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.TimeoutableRequest
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.min
@@ -26,7 +23,6 @@ class RNBleManager(
   private val sendEvent: (event: Event, payload: Map<String, Any?>) -> Unit
 ) : BleManager(context) {
   private val requestById = HashMap<String, TimeoutableRequest>()
-  private val cancelledRequests = HashSet<String>()
   private var gatt: BluetoothGatt? = null
   private var mtu: Int? = null
 
@@ -68,7 +64,6 @@ class RNBleManager(
 
   override fun initialize() {
     requestById.clear()
-    cancelledRequests.clear()
 
     val mtu = mtu
     if (mtu != null) {
@@ -110,18 +105,12 @@ class RNBleManager(
       .timeout(TIMEOUT_MS)
       .then {
         requestById.remove(transactionId)
-        cancelledRequests.remove(transactionId)
       }
       .enqueue()
   }
 
   fun cancel(transactionId: String) {
-    cancelledRequests.add(transactionId)
     requestById[transactionId]?.cancel()
-  }
-
-  private fun isCancelled(transactionId: String): Boolean {
-    return cancelledRequests.contains(transactionId)
   }
 
   fun connect(device: BluetoothDevice, mtu: Int, promise: Promise) {
@@ -203,8 +192,37 @@ class RNBleManager(
     size: Int,
     promise: Promise
   ) {
+    var received = 0
     findCharacteristic(promise, service, characteristic) { characteristic ->
-      readCharRecursive(transactionId, characteristic, ByteArrayOutputStream(), size, promise)
+      enqueue(
+        transactionId, readCharacteristic(characteristic)
+          .merge({ output, lastPacket, index ->
+            if (size != 0 && lastPacket?.size == 1 && lastPacket.get(0) == EOF_BYTE) {
+              true // EOF received
+            } else {
+              output.write(lastPacket)
+              size == 0 || output.size() >= size
+            }
+          }) { device, data, index ->
+            received += data?.size ?: 0
+            sendEvent(
+              Event.PROGRESS, mapOf(
+                "transactionId" to transactionId,
+                "service" to characteristic.service.uuid.toString(),
+                "characteristic" to characteristic.uuid.toString(),
+                "total" to size,
+                "current" to received,
+              )
+            )
+          }
+          .with { device, data ->
+            promise.resolve(Base64.encode(data.value, Base64.DEFAULT))
+          }
+          .fail { device, status ->
+            Log.w(LOG_TAG, "Error reading characteristic: $status")
+            promise.reject(BleError.ERROR_GATT.name, "Error reading characteristic: $status", null)
+          }
+      )
     }
   }
 
@@ -374,119 +392,43 @@ class RNBleManager(
     }
   }
 
-  private fun readCharRecursive(
-    transactionId: String,
-    characteristic: BluetoothGattCharacteristic,
-    received: ByteArrayOutputStream,
-    toReceive: Int,
-    promise: Promise
-  ) {
-    if (isCancelled(transactionId)) {
-      promise.reject(BleError.ERROR_OPERATION_CANCELED.name, "BLE transaction was cancelled", null)
-    } else {
-      enqueue(
-        transactionId, readCharacteristic(characteristic)
-          .with { device, data ->
-            val isEOF = toReceive != 0 && data.size() == 1 && data.getByte(0) == EOF_BYTE
-            if (!isEOF) {
-              received.write(data.value)
-            }
-
-            sendEvent(
-              Event.PROGRESS, mapOf(
-                "transactionId" to transactionId,
-                "service" to characteristic.service.uuid.toString(),
-                "characteristic" to characteristic.uuid.toString(),
-                "total" to toReceive,
-                "current" to received.size(),
-              )
-            )
-
-            val hasMoreData = toReceive != 0 && received.size() < toReceive
-            if (hasMoreData && !isEOF) {
-              readCharRecursive(transactionId, characteristic, received, toReceive, promise)
-            } else {
-              promise.resolve(Base64.encode(received.toByteArray(), Base64.DEFAULT))
-            }
-          }
-          .fail { device, status ->
-            Log.w(LOG_TAG, "Error reading characteristic: $status")
-            promise.reject(BleError.ERROR_GATT.name, "Error reading characteristic: $status", null)
-          }
-      )
-    }
-  }
-
   fun writeChar(
     transactionId: String,
     service: String,
     characteristic: String,
-    data: ByteArray,
+    packet: ByteArray,
     chunkSize: Int,
     promise: Promise
   ) {
+    var written = 0
     findCharacteristic(promise, service, characteristic) { characteristic ->
-      writeCharRecursive(
-        transactionId,
-        characteristic,
-        ByteArrayInputStream(data),
-        chunkSize,
-        data.size,
-        promise
-      )
-    }
-
-  }
-
-  private fun writeCharRecursive(
-    transactionId: String,
-    characteristic: BluetoothGattCharacteristic,
-    toWrite: ByteArrayInputStream,
-    chunkSize: Int,
-    totalSize: Int,
-    promise: Promise
-  ) {
-    if (isCancelled(transactionId)) {
-      promise.reject(BleError.ERROR_OPERATION_CANCELED.name, "BLE transaction was cancelled", null)
-    } else {
-      val size = min(chunkSize, toWrite.available())
-      val data = ByteArray(size)
-      toWrite.read(data, 0, size)
       enqueue(
         transactionId, writeCharacteristic(
-          characteristic, data,
+          characteristic, packet,
           BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         )
-          .done {
+          .split({ message, index, maxLength ->
+            message.slice((index * chunkSize..min((index + 1) * chunkSize - 1, message.size)))
+              .toByteArray()
+          }) { device, data, index ->
+            written += data?.size ?: 0
             sendEvent(
               Event.PROGRESS, mapOf(
                 "transactionId" to transactionId,
                 "service" to characteristic.service.uuid.toString(),
                 "characteristic" to characteristic.uuid.toString(),
-                "total" to totalSize,
-                "current" to toWrite.available(),
+                "total" to packet.size,
+                "current" to written,
               )
             )
-
-            if (toWrite.available() > 0) {
-              writeCharRecursive(
-                transactionId,
-                characteristic,
-                toWrite,
-                chunkSize,
-                totalSize,
-                promise
-              )
-            } else {
-              promise.resolve()
-            }
           }
-          .fail { device, status ->
-            promise.reject(BleError.ERROR_GATT.name, "Error writing data chunk: $status", null)
+          .done {
+            promise.resolve()
           }
       )
     }
   }
+
 
   private fun findCharacteristic(
     promise: Promise,
