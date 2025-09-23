@@ -17,6 +17,7 @@ import kotlin.math.min
 private const val STANDARD_UUID_SUFFIX = "-0000-1000-8000-00805F9B34FB"
 private const val EOF_BYTE = 0xff.toByte()
 private const val TIMEOUT_MS = 5_000L
+private const val PROGRESS_SEND_INTERVAL_MS = 1_000L
 
 class RNBleManager(
   context: Context,
@@ -195,6 +196,7 @@ class RNBleManager(
     promise: Promise
   ) {
     var received = 0
+    var lastProgressSentTime = 0L
     findCharacteristic(promise, service, characteristic) { characteristic ->
       enqueue(
         transactionId, readCharacteristic(characteristic)
@@ -207,15 +209,20 @@ class RNBleManager(
             }
           }) { device, data, index ->
             received += data?.size ?: 0
-            sendEvent(
-              Event.PROGRESS, mapOf(
-                "transactionId" to transactionId,
-                "service" to characteristic.service.uuid.toString(),
-                "characteristic" to characteristic.uuid.toString(),
-                "total" to size,
-                "current" to received,
+
+            val now = System.currentTimeMillis()
+            if (now - lastProgressSentTime > PROGRESS_SEND_INTERVAL_MS) {
+              sendEvent(
+                Event.PROGRESS, mapOf(
+                  "transactionId" to transactionId,
+                  "service" to characteristic.service.uuid.toString(),
+                  "characteristic" to characteristic.uuid.toString(),
+                  "total" to size,
+                  "current" to received,
+                )
               )
-            )
+              lastProgressSentTime = now
+            }
           }
           .with { device, data ->
             promise.resolve(Base64.encode(data.value, Base64.DEFAULT))
@@ -411,6 +418,7 @@ class RNBleManager(
     promise: Promise
   ) {
     var written = 0
+    var lastProgressSentTime = 0L
     findCharacteristic(promise, service, characteristic) { characteristic ->
       enqueue(
         transactionId, writeCharacteristic(
@@ -429,15 +437,20 @@ class RNBleManager(
           }) { device, data, index ->
             log(Log.VERBOSE, "Wrote chunk $index of ${data?.size} bytes")
             written += data?.size ?: 0
-            sendEvent(
-              Event.PROGRESS, mapOf(
-                "transactionId" to transactionId,
-                "service" to characteristic.service.uuid.toString(),
-                "characteristic" to characteristic.uuid.toString(),
-                "total" to packet.size,
-                "current" to written,
+
+            val now = System.currentTimeMillis()
+            if (now - lastProgressSentTime > PROGRESS_SEND_INTERVAL_MS) {
+              sendEvent(
+                Event.PROGRESS, mapOf(
+                  "transactionId" to transactionId,
+                  "service" to characteristic.service.uuid.toString(),
+                  "characteristic" to characteristic.uuid.toString(),
+                  "total" to packet.size,
+                  "current" to written,
+                )
               )
-            )
+              lastProgressSentTime = now
+            }
           }
           .done {
             log(Log.WARN, "Successfully wrote to char ${characteristic.uuid}")

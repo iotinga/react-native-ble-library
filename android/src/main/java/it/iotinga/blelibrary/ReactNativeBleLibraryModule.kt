@@ -18,7 +18,7 @@ class ReactNativeBleLibraryModule : Module() {
   private var adapter: BluetoothAdapter? = null
   private var scanner: RNBleScanner? = null
   private var bleActivationPromise: Promise? = null
-  private var logLevel: Int = Log.VERBOSE
+  private var logLevel: Int = Log.DEBUG
 
   companion object {
     const val REQUEST_ENABLE_BT = 1
