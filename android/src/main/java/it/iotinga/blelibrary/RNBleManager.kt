@@ -34,6 +34,10 @@ class RNBleManager(
     return Log.VERBOSE
   }
 
+  override fun log(priority: Int, message: String) {
+    Log.println(priority, LOG_TAG, message)
+  }
+
   private fun emitConnectionStateChange(
     state: ConnectionState,
     gattStatus: Int,
