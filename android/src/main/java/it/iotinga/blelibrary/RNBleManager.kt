@@ -384,7 +384,10 @@ class RNBleManager(
       } else if (characteristic.supportsIndication()) {
         disableIndication(transactionId, characteristic, promise)
       } else {
-        log(Log.WARN, "Characteristic ${characteristic.uuid} doesn't support indication or notification")
+        log(
+          Log.WARN,
+          "Characteristic ${characteristic.uuid} doesn't support indication or notification"
+        )
         promise.reject(
           BleError.ERROR_INVALID_ARGUMENTS.name,
           "Characteristic does not support notification or indication",
@@ -410,10 +413,16 @@ class RNBleManager(
           BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         )
           .split({ message, index, maxLength ->
-            message.slice((index * chunkSize..min((index + 1) * chunkSize, message.size) - 1))
-              .toByteArray()
+            val packetSize = min(maxLength, chunkSize)
+            val startIndex = index * packetSize
+            if (startIndex >= message.size) {
+              null
+            } else {
+              message.slice((startIndex..min(startIndex + packetSize, message.size) - 1))
+                .toByteArray()
+            }
           }) { device, data, index ->
-            log(Log.VERBOSE, "Wrote chunk ${index} of ${data?.size} bytes")
+            log(Log.VERBOSE, "Wrote chunk $index of ${data?.size} bytes")
             written += data?.size ?: 0
             sendEvent(
               Event.PROGRESS, mapOf(
