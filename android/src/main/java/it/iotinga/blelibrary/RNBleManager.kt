@@ -69,7 +69,9 @@ class RNBleManager(
   }
 
   override fun log(priority: Int, message: String) {
-    Log.println(priority, LOG_TAG, message)
+    if (priority >= logLevel) {
+      Log.println(priority, LOG_TAG, message)
+    }
   }
 
   private fun emitConnectionStateChange(
@@ -255,7 +257,7 @@ class RNBleManager(
             }
           }
           .with { device, data ->
-            promise.resolve(Base64.encode(data.value, Base64.DEFAULT))
+            promise.resolve(Base64.encodeToString(data.value, Base64.DEFAULT))
           }
           .fail { device, status ->
             log(Log.WARN, "Error reading characteristic: $status")
