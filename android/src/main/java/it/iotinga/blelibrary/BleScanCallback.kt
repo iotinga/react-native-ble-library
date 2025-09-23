@@ -7,12 +7,12 @@ import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresPermission
 
-class BleScanCallback internal constructor(private val sendEvent: (event: String, payload: Map<String, Any>) -> Unit) :
+class BleScanCallback internal constructor(private val sendEvent: (event: Event, payload: Map<String, Any>) -> Unit) :
   ScanCallback() {
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   override fun onScanResult(callbackType: Int, result: ScanResult) {
     Log.i(
-      Constants.LOG_TAG,
+      LOG_TAG,
       String.format("got scan result: %s (callback type: %d)", result, callbackType)
     )
 
@@ -23,11 +23,11 @@ class BleScanCallback internal constructor(private val sendEvent: (event: String
   }
 
   override fun onScanFailed(errorCode: Int) {
-    Log.e(Constants.LOG_TAG, "SCAN FAILED, error = $errorCode")
+    Log.e(LOG_TAG, "SCAN FAILED, error = $errorCode")
 
     sendEvent(
       Event.ERROR, mapOf(
-        "code" to BleError.ERROR_SCAN,
+        "code" to BleError.ERROR_SCAN.name,
         "message" to "scan error, native error code $errorCode",
       )
     )
@@ -35,7 +35,7 @@ class BleScanCallback internal constructor(private val sendEvent: (event: String
 
   @RequiresPermission(value = "android.permission.BLUETOOTH_CONNECT")
   override fun onBatchScanResults(results: MutableList<ScanResult?>) {
-    Log.i(Constants.LOG_TAG, "got batch result: $results")
+    Log.i(LOG_TAG, "got batch result: $results")
 
     sendScanResult(results, true)
   }
@@ -48,8 +48,8 @@ class BleScanCallback internal constructor(private val sendEvent: (event: String
           "rssi" to item.rssi,
           "isAvailable" to isAvailable,
           "id" to item.device.address,
-          "isConnectable" to item.isConnectable,
-          "txPower" to item.txPower,
+          "isConnectable" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) item.isConnectable else true,
+          "txPower" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) item.txPower else 0,
           "name" to (item.scanRecord?.deviceName ?: "")
         )
       }

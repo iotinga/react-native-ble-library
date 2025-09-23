@@ -9,64 +9,64 @@ import androidx.core.app.ActivityCompat
 import expo.modules.interfaces.permissions.Permissions
 import expo.modules.interfaces.permissions.PermissionsStatus
 
-class BlePermissionsManager(private val context: Context, private val permissionManager: Permissions) {
-    private val permissions: MutableList<String> = ArrayList()
+class BlePermissionsManager(
+  private val context: Context,
+  private val permissionManager: Permissions
+) {
+  private val permissions: List<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    listOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
+  } else {
+    listOf(
+      Manifest.permission.BLUETOOTH,
+      Manifest.permission.BLUETOOTH_ADMIN,
+      Manifest.permission.ACCESS_FINE_LOCATION,
+      Manifest.permission.ACCESS_COARSE_LOCATION
+    )
+  }
 
-    init {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        this.permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-        this.permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+  fun ensure(callback: (granted: Boolean) -> Unit) {
+    val missingPermissions: MutableList<String?> = ArrayList()
+
+    for (permission in permissions) {
+      if (ActivityCompat.checkSelfPermission(
+          context,
+          permission
+        ) != PackageManager.PERMISSION_GRANTED
+      ) {
+        missingPermissions.add(permission)
+        Log.w(
+          LOG_TAG,
+          "missing permission: $permission"
+        )
       } else {
-        this.permissions.add(Manifest.permission.BLUETOOTH)
-        this.permissions.add(Manifest.permission.BLUETOOTH_ADMIN)
-        this.permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        this.permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        Log.d(
+          LOG_TAG,
+          "granted permissions: $permission"
+        )
       }
     }
+    if (missingPermissions.isEmpty()) {
+      Log.i(LOG_TAG, "all permissions granted :)")
+      callback(true)
+    } else {
+      Log.d(LOG_TAG, "requesting permissions: $missingPermissions")
 
-    fun ensure(callback: (granted: Boolean) -> Unit) {
-      val missingPermissions: MutableList<String?> = ArrayList()
+      permissionManager.askForPermissions({ result ->
+        Log.d(LOG_TAG, "permissions request callback: $result")
 
-      for (permission in permissions) {
-        if (ActivityCompat.checkSelfPermission(
-            context,
-            permission
-          ) != PackageManager.PERMISSION_GRANTED
-        ) {
-          missingPermissions.add(permission)
-          Log.w(
-            Constants.LOG_TAG,
-            "missing permission: $permission"
-          )
-        } else {
-          Log.d(
-            Constants.LOG_TAG,
-            "granted permissions: $permission"
-          )
+        var allPermissionsGranted = true
+        for (permission in permissions) {
+          if (result[permission]?.status != PermissionsStatus.GRANTED) {
+            Log.w(LOG_TAG, "permission not granted: $permission")
+            allPermissionsGranted = false
+          } else {
+            Log.d(LOG_TAG, "permission granted: $permission")
+          }
         }
-      }
-        if (missingPermissions.isEmpty()) {
-            Log.i(Constants.LOG_TAG, "all permissions granted :)")
-            callback(true)
-        } else {
-          Log.d(Constants.LOG_TAG, "requesting permissions: $missingPermissions")
 
-          permissionManager.askForPermissions({ result ->
-            Log.d(Constants.LOG_TAG, "permissions request callback: $result")
+        callback(allPermissionsGranted)
 
-            var allPermissionsGranted = true
-            for (permission in permissions) {
-              if (result[permission]?.status != PermissionsStatus.GRANTED) {
-                Log.w(Constants.LOG_TAG, "permission not granted: $permission")
-                allPermissionsGranted = false
-              } else {
-                Log.d(Constants.LOG_TAG, "permission granted: $permission")
-              }
-            }
-
-            callback(allPermissionsGranted)
-
-          }, *missingPermissions.toTypedArray())
-        }
+      }, *missingPermissions.toTypedArray())
     }
+  }
 }

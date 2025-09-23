@@ -1,39 +1,35 @@
 package it.iotinga.blelibrary
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothManager
-import android.bluetooth.le.BluetoothLeScanner
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
-import android.os.ParcelUuid
 import android.util.Base64
 import android.util.Log
-import androidx.annotation.RequiresPermission
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 
 class ReactNativeBleLibraryModule : Module() {
-  private var manager: BluetoothManager? = null
+  private var manager: RNBleManager? = null
   private var adapter: BluetoothAdapter? = null
-  private var scanner: BluetoothLeScanner? = null
-  private var gattCallback: BluetoothGattCallback? = null
-  private var scanCallback: ScanCallback? = null
+  private var scanner: RNBleScanner? = null
   private var bleActivationPromise: Promise? = null
-  private val context = ConnectionContext()
-  private val executor: TransactionExecutor = TransactionQueueExecutor()
 
   companion object {
     const val REQUEST_ENABLE_BT = 1
+  }
+
+  private fun onBleReady() {
+    val bleManager =
+      appContext.reactContext!!.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+    adapter = bleManager.adapter
+    manager =
+      RNBleManager(appContext.reactContext!!) { event, payload -> sendEvent(event.value, payload) }
+    scanner = RNBleScanner(bleManager.adapter) { event, payload -> sendEvent(event.value, payload) }
   }
 
   // Each module class must implement the definition function. The definition consists of components
@@ -48,35 +44,35 @@ class ReactNativeBleLibraryModule : Module() {
 
     // Defines event names that the module can send to JavaScript.
     Events(
-      Event.ERROR,
-      Event.PROGRESS,
-      Event.SCAN_RESULT,
-      Event.CHAR_VALUE_CHANGED,
-      Event.CONNECTION_STATE_CHANGED
+      Event.ERROR.value,
+      Event.PROGRESS.value,
+      Event.SCAN_RESULT.value,
+      Event.CHAR_VALUE_CHANGED.value,
+      Event.CONNECTION_STATE_CHANGED.value
     )
 
     AsyncFunction("initModule") { promise: Promise ->
-      Log.d(Constants.LOG_TAG, "initModule()")
+      Log.d(LOG_TAG, "initModule()")
 
-      Log.i(Constants.LOG_TAG, "checking permissions")
+      Log.i(LOG_TAG, "checking permissions")
 
       val permissionManager =
         BlePermissionsManager(appContext.reactContext!!, appContext.permissions!!)
       permissionManager.ensure { granted: Boolean ->
         if (!granted) {
-          Log.w(Constants.LOG_TAG, "permission denied")
+          Log.w(LOG_TAG, "permission denied")
 
           promise.reject(BleError.ERROR_MISSING_PERMISSIONS.name, "missing BLE permissions", null)
         } else {
-          Log.i(Constants.LOG_TAG, "permission granted")
+          Log.i(LOG_TAG, "permission granted")
 
-          manager =
+          val manager =
             appContext.reactContext!!.getSystemService(
               Context.BLUETOOTH_SERVICE
             ) as BluetoothManager?
-          adapter = manager!!.adapter
+          adapter = manager?.adapter
           if (adapter == null) {
-            Log.w(Constants.LOG_TAG, "this device doesn't have a BLE adapter")
+            Log.w(LOG_TAG, "this device doesn't have a BLE adapter")
 
             promise.reject(
               BleError.ERROR_BLE_NOT_SUPPORTED.name,
@@ -84,13 +80,14 @@ class ReactNativeBleLibraryModule : Module() {
               null
             )
           } else {
-            Log.i(Constants.LOG_TAG, "checking if BLE is active")
+            Log.i(LOG_TAG, "checking if BLE is active")
 
             if (adapter!!.isEnabled) {
-              Log.i(Constants.LOG_TAG, "BLE is active");
+              Log.i(LOG_TAG, "BLE is active");
+              onBleReady()
               promise.resolve();
             } else {
-              Log.i(Constants.LOG_TAG, "asking user to turn BLE on");
+              Log.i(LOG_TAG, "asking user to turn BLE on");
 
               val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
               appContext.currentActivity!!.startActivityForResult(
@@ -104,10 +101,13 @@ class ReactNativeBleLibraryModule : Module() {
       }
     }
 
+    // Catches the result of an activity
+    // Here it's used to get the result of the activate BLE activity
     OnActivityResult { activity, onActivityResultPayload ->
       val activationPromise = bleActivationPromise
       if (onActivityResultPayload.requestCode == REQUEST_ENABLE_BT && activationPromise != null) {
         if (onActivityResultPayload.resultCode == Activity.RESULT_OK) {
+          onBleReady()
           activationPromise.resolve();
         } else {
           activationPromise.reject(
@@ -120,346 +120,179 @@ class ReactNativeBleLibraryModule : Module() {
     }
 
     AsyncFunction("disposeModule") { promise: Promise ->
-      Log.d(Constants.LOG_TAG, "disposeModule()")
+      Log.d(LOG_TAG, "disposeModule()")
 
-      executor.flush(BleError.ERROR_NOT_INITIALIZED, "module disposed")
+      scanner?.stop()
+      scanner = null
 
-      if (context.gatt != null) {
-        context.gatt!!.close()
-        context.gatt = null
-        gattCallback = null
+      val managerCopy = manager
+      if (managerCopy != null) {
+        managerCopy.dispose(promise)
+        manager = null
+      } else {
+        promise.resolve()
       }
-
-      if (scanner != null) {
-        scanner!!.stopScan(scanCallback)
-        scanner = null
-        scanCallback = null
-      }
-
-      adapter = null
-      manager = null
-
-      Log.i(Constants.LOG_TAG, "module disposed correctly :)")
-      promise.resolve(null)
     }
 
     AsyncFunction("cancel") { transactionId: String, promise: Promise ->
-      Log.d(Constants.LOG_TAG, String.format("cancel(%s)", transactionId))
+      Log.d(LOG_TAG, "cancel($transactionId)")
 
-      executor.cancel(transactionId)
+      ensureManagerInitialized(promise) { manager ->
+        manager.cancel(transactionId)
+      }
 
       promise.resolve(null)
     }
 
-    AsyncFunction("scanStart") { filterUuid: MutableList<String?>?, promise: Promise ->
-      Log.d(Constants.LOG_TAG, String.format("scanStart(%s)", filterUuid))
+    AsyncFunction("scanStart") { filterUuid: MutableList<String>?, promise: Promise ->
+      Log.d(LOG_TAG, "scanStart($filterUuid)")
 
-      if (adapter == null) {
+      val scanner = scanner
+      if (scanner == null) {
         promise.reject(BleError.ERROR_NOT_INITIALIZED.name, "module is not initialized", null)
       } else {
-        val isFilteringSupported = adapter!!.isOffloadedFilteringSupported()
-
-        Log.i(
-          Constants.LOG_TAG,
-          String.format("starting scan filter supported %b", isFilteringSupported)
-        )
-
-        var filters: MutableList<ScanFilter?>? = null
-        val settings = ScanSettings.Builder()
-
-        settings.setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-        settings.setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-        settings.setReportDelay(0)
-        if (isFilteringSupported && filterUuid != null && !filterUuid.isEmpty()) {
-          settings.setCallbackType(ScanSettings.CALLBACK_TYPE_FIRST_MATCH or ScanSettings.CALLBACK_TYPE_MATCH_LOST)
-
-          filters = ArrayList()
-          for (i in filterUuid.indices) {
-            val serviceUuid = filterUuid[i]
-            Log.d(Constants.LOG_TAG, "adding filter UUID: $serviceUuid")
-            val uuid = ParcelUuid.fromString(serviceUuid)
-            filters.add(ScanFilter.Builder().setServiceUuid(uuid).build())
-          }
-        } else {
-          settings.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-        }
-
-        if (scanner == null) {
-          scanner = adapter!!.getBluetoothLeScanner()
-          scanCallback = BleScanCallback({ event, payload -> sendEvent(event, payload) })
-        } else {
-          // stopping existing scan to restart it
-          try {
-            scanner!!.stopScan(scanCallback)
-          } catch (e: Exception) {
-            Log.w(
-              Constants.LOG_TAG,
-              "error stopping scan: " + e.message + ". Ignoring and continuing anyway"
-            )
-          }
-        }
-
         try {
-          scanner!!.startScan(filters, settings.build(), scanCallback)
-
-          promise.resolve(null)
+          scanner.start(filterUuid)
+          promise.resolve()
         } catch (e: Exception) {
-          Log.e(Constants.LOG_TAG, "error starting scan: " + e.message)
-          promise.reject(BleError.ERROR_SCAN.name, "error starting scan: " + e.message, e)
+          Log.e(LOG_TAG, "error starting scan: ${e.message}")
+          promise.reject(BleError.ERROR_SCAN.name, "error starting scan: ${e.message}", e)
         }
       }
     }
 
     AsyncFunction("scanStop") { promise: Promise ->
-      Log.d(Constants.LOG_TAG, "scanStop()")
-
-      if (scanner != null) {
-        try {
-          scanner!!.stopScan(scanCallback)
-        } catch (e: Exception) {
-          Log.w(Constants.LOG_TAG, "error stopping scan, error: " + e.message)
-          // ignore error here, this is expected to fail in case BLE is turned off
-        }
-        scanner = null
-        scanCallback = null
-      }
-
-      promise.resolve(null)
-    }
-
-    AsyncFunction("connect") { id: String, mtu: Double, promise: Promise ->
-      Log.d(Constants.LOG_TAG, String.format("connect(%s, %f)", id, mtu))
-
-      val manager = RNBleManager()
-      manager.connect(adapter!!.getRemoteDevice(id))
-        .retry(3)
-        .timeout(15_000)
-        .useAutoConnect(false)
-        .done { promise.resolve() }
-        .fail { device, status -> promise.reject(BleError.ERROR_NOT_CONNECTED.name, "error connecting to device status: $status", null) }
-        .enqueue()
-
+      Log.d(LOG_TAG, "scanStop()")
       try {
-        // ensure scan is not active (can create problems on some devices)
-        if (scanner != null) {
-          Log.i(Constants.LOG_TAG, "stopping BLE scan")
-
-          try {
-            scanner!!.stopScan(scanCallback)
-            scanner = null
-            scanCallback = null
-          } catch (e: Exception) {
-            Log.w(Constants.LOG_TAG, "failed stopping scan: $e")
-          }
-        }
-
-        // the documentation says that we must do this
-        adapter!!.cancelDiscovery()
-
-        if (context.gatt != null) {
-          Log.i(Constants.LOG_TAG, "closing existing GATT instance")
-
-          context.gatt!!.close()
-          context.gatt = null
-        }
-
-        // ensure transaction queue is empty
-        executor.flush(BleError.ERROR_NOT_CONNECTED, "a new connection is starting")
-
-        val device: BluetoothDevice
-        try {
-          device = adapter!!.getRemoteDevice(id)
-        } catch (e: Exception) {
-          Log.e(Constants.LOG_TAG, "cannot find device with address $id")
-
-          promise.reject(
-            BleError.ERROR_DEVICE_NOT_FOUND.name,
-            "the specified device was not found",
-            null
-          )
-          return@AsyncFunction
-        }
-
-        Log.d(Constants.LOG_TAG, "starting GATT connection")
-        context.mtu = mtu.toInt()
-        gattCallback = BleBluetoothGattCallback(
-          { event, payload -> sendEvent(event, payload) },
-          context,
-          executor
-        )
-
-        // Must specify BluetoothDevice.TRANSPORT_LE otherwise this is not working on
-        // certain phones
-        context.gatt = device.connectGatt(
-          appContext.reactContext, false, gattCallback,
-          BluetoothDevice.TRANSPORT_LE
-        )
-        if (context.gatt == null) {
-          promise.reject(BleError.ERROR_GATT.name, "gatt instance is null", null)
-        }
-
-        // signals that the connection request is taking progress
-        promise.resolve(null)
+        scanner?.stop()
       } catch (e: Exception) {
-        promise.reject(BleError.ERROR_GATT.name, "unhandled exception: " + e.message, e)
-        Log.e(Constants.LOG_TAG, "unhandled exception: " + e.message)
-      }
-    }
-
-    AsyncFunction("disconnect") { promise: Promise ->
-      Log.d(Constants.LOG_TAG, "disconnect()")
-
-      executor.flush(BleError.ERROR_NOT_CONNECTED, "disconnecting device")
-
-      if (context.gatt != null) {
-        try {
-          context.gatt!!.disconnect()
-        } catch (e: Exception) {
-          Log.w(
-            Constants.LOG_TAG,
-            "disconnect failed. Continuing anyway, error: ${e.message}"
-          )
-        }
-        try {
-          context.gatt!!.close()
-        } catch (e: Exception) {
-          Log.w(
-            Constants.LOG_TAG,
-            "gatt close failed. Continuing anyway, error: ${e.message}"
-          )
-        }
-        context.gatt = null
+        Log.w(LOG_TAG, "error stopping scan, error: " + e.message)
+        // ignore error here, this is expected to fail in case BLE is turned off
       }
 
-      promise.resolve(null)
+      promise.resolve()
     }
 
-    AsyncFunction("readRSSI") { transactionId: String, promise: Promise ->
-      Log.d(Constants.LOG_TAG, "readRSSI()")
+    AsyncFunction("connect")
+    { id: String, mtu: Int, promise: Promise ->
+      Log.d(LOG_TAG, "connect($id, $mtu)")
 
-      executor.add(TransactionReadRssi(transactionId, promise, context.gatt!!))
-    }
-
-    AsyncFunction("read") { transactionId: String,
-                            service: String,
-                            characteristic: String,
-                            size: Double,
-                            promise: Promise
-      ->
-      Log.d(Constants.LOG_TAG, String.format("read(%s, %s, %f)", service, characteristic, size))
-
-      val gatt = context.gatt
-      if (gatt == null) {
-        promise.reject(BleError.ERROR_NOT_CONNECTED.name, "GATT instance is NULL", null);
+      val isAddressValid = BluetoothAdapter.checkBluetoothAddress(id)
+      if (!isAddressValid) {
+        promise.reject(
+          BleError.ERROR_INVALID_ARGUMENTS.name,
+          "BLE address not in valid format",
+          null
+        )
         return@AsyncFunction
       }
 
-      executor.add(
-        TransactionReadChar(
-          transactionId,
-          promise,
-          gatt,
-          service,
-          characteristic,
-          size.toInt()
-        ) { event, payload -> sendEvent(event, payload) },
-      )
-    }
-
-    AsyncFunction("write") { transactionId: String,
-                             service: String,
-                             characteristic: String,
-                             value: String,
-                             chunkSize: Int,
-                             promise: Promise
-      ->
-      Log.d(
-        Constants.LOG_TAG,
-        String.format("write(%s, %s, %s, %f)", service, characteristic, value, chunkSize)
-      )
-
-      val gatt = context.gatt
-      if (gatt == null) {
-        promise.reject(BleError.ERROR_NOT_CONNECTED.name, "GATT client is null", null)
+      val adapter = adapter
+      if (adapter == null) {
+        promise.reject(BleError.ERROR_NOT_INITIALIZED.name, "Manager is not initialized", null)
         return@AsyncFunction
       }
 
-      val data = Base64.decode(value, Base64.DEFAULT)
+      scanner?.stop()
 
-      executor.add(
-        TransactionWriteChar(
-          transactionId, promise, gatt, service, characteristic, data,
-          chunkSize
-        ) { event, payload -> sendEvent(event, payload) }
-      )
+      ensureManagerInitialized(promise) { manager ->
+        manager.connect(adapter.getRemoteDevice(id), mtu, promise)
+      }
     }
 
-    AsyncFunction("subscribe") { transactionId: String,
-                                 serviceUuid: String,
-                                 characteristicUuid: String,
-                                 promise: Promise
-      ->
-      Log.d(
-        Constants.LOG_TAG,
-        String.format("subscribe(%s, %s, %s)", transactionId, serviceUuid, characteristicUuid)
-      )
+    AsyncFunction("disconnect")
+    { promise: Promise ->
+      Log.d(LOG_TAG, "disconnect()")
 
-      setNotificationEnabled(promise, serviceUuid, characteristicUuid, true)
+      ensureManagerInitialized(promise) { manager ->
+        manager.disconnect()
+      }
     }
 
-    AsyncFunction("unsubscribe") { transactionId: String,
-                                   serviceUuid: String,
-                                   characteristicUuid: String,
-                                   promise: Promise
+    AsyncFunction("readRSSI")
+    { transactionId: String, promise: Promise ->
+      Log.d(LOG_TAG, "readRSSI()")
+
+      ensureManagerInitialized(promise) { manager ->
+        manager.getRSSI(promise)
+      }
+    }
+
+    AsyncFunction("read")
+    { transactionId: String,
+      service: String,
+      characteristic: String,
+      size: Int,
+      promise: Promise
+      ->
+      Log.d(LOG_TAG, "read($service, $characteristic, $size)")
+
+      ensureManagerInitialized(promise) { manager ->
+        manager.readChar(transactionId, service, characteristic, size, promise)
+      }
+    }
+
+    AsyncFunction("write")
+    { transactionId: String,
+      service: String,
+      characteristic: String,
+      value: String,
+      chunkSize: Int,
+      promise: Promise
       ->
       Log.d(
-        Constants.LOG_TAG,
-        String.format("unsubscribe(%s, %s, %s)", transactionId, serviceUuid, characteristicUuid)
+        LOG_TAG,
+        "write($service, $characteristic, ${value.length}, $chunkSize)"
       )
 
-      setNotificationEnabled(promise, serviceUuid, characteristicUuid, false)
+      ensureManagerInitialized(promise) { manager ->
+        val data = Base64.decode(value, Base64.DEFAULT)
+        manager.writeChar(transactionId, service, characteristic, data, chunkSize, promise)
+      }
+    }
+
+    AsyncFunction("subscribe")
+    { transactionId: String,
+      serviceUuid: String,
+      characteristicUuid: String,
+      promise: Promise
+      ->
+      Log.d(
+        LOG_TAG,
+        "subscribe($transactionId, $serviceUuid, $characteristicUuid"
+      )
+
+      ensureManagerInitialized(promise) { manager ->
+        manager.enableNotification(transactionId, serviceUuid, characteristicUuid, promise)
+      }
+    }
+
+    AsyncFunction("unsubscribe")
+    { transactionId: String,
+      serviceUuid: String,
+      characteristicUuid: String,
+      promise: Promise
+      ->
+      Log.d(
+        LOG_TAG,
+        "unsubscribe($transactionId, $serviceUuid, $characteristicUuid)"
+      )
+
+      ensureManagerInitialized(promise) { manager ->
+        manager.disableNotification(transactionId, serviceUuid, characteristicUuid, promise)
+      }
     }
   }
 
-  @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-  private fun setNotificationEnabled(
+  private fun ensureManagerInitialized(
     promise: Promise,
-    serviceUuid: String,
-    characteristicUuid: String,
-    enabled: Boolean
+    callback: (manager: RNBleManager) -> Unit
   ) {
-    try {
-      val gatt = context.gatt
-
-      if (gatt == null) {
-        promise.reject(BleError.ERROR_NOT_CONNECTED.name, "GATT instance is null", null)
-      } else {
-        val characteristic = GattTransaction.getCharacteristic(
-          gatt, serviceUuid,
-          characteristicUuid
-        )
-        if (characteristic == null) {
-          promise.reject(
-            BleError.ERROR_INVALID_ARGUMENTS.name,
-            "characteristic is not found",
-            null
-          )
-        } else {
-          val success = gatt.setCharacteristicNotification(characteristic, enabled)
-          if (success) {
-            promise.resolve(null)
-          } else {
-            promise.reject(
-              BleError.ERROR_GATT.name,
-              "error setting characteristic notification",
-              null
-            )
-          }
-        }
-      }
-    } catch (e: Exception) {
-      Log.e(Constants.LOG_TAG, "unhandled exception: " + e.message)
-      promise.reject(BleError.ERROR_GENERIC.name, "unhandled exception: " + e.message, e)
+    val manager = manager
+    if (manager == null) {
+      promise.reject(BleError.ERROR_NOT_INITIALIZED.name, "BLE not initialized", null)
+    } else {
+      callback(manager)
     }
   }
 }
