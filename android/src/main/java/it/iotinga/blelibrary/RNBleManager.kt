@@ -236,7 +236,7 @@ class RNBleManager(
       enqueue(
         transactionId, readCharacteristic(characteristic)
           .merge({ output, lastPacket, index ->
-            if (size != 0 && lastPacket?.size == 1 && lastPacket.get(0) == EOF_BYTE) {
+            if (size != 0 && lastPacket?.size == 1 && lastPacket[0] == EOF_BYTE) {
               true // EOF received
             } else {
               output.write(lastPacket)

@@ -206,6 +206,9 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
   // Connection promise, that is resolved when the device has connected and discovered services
   private var connectionPromise: Promise?
 
+  // Signals that the whole connection process (connect, service discovery) has completed
+  private var connectionSuccess = false
+
   // Computed properties mirroring the Objective-C getters
   private var isConnected: Bool {
     return manager != nil && peripheral != nil
@@ -220,9 +223,9 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
   // MARK: - Exported Methods
 
   func initModule(promise: Promise) {
-    NSLog("[BleLibrary] initModule()")
+    print("[BleLibrary] initModule()")
     if self.manager == nil {
-      NSLog("[BleLibrary] init manager")
+      print("[BleLibrary] init manager")
       self.transactionById = [:]
       self.readOperationByCharUuid = [:]
       self.writeOperationByCharUuid = [:]
@@ -233,19 +236,19 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       )
       self.manager = CBCentralManager(delegate: self, queue: nil)
     } else {
-      NSLog("[BleLibrary] manager already initialized")
+      print("[BleLibrary] manager already initialized")
       promise.resolve(nil)
     }
   }
 
   func disposeModule(promise: Promise) {
-    NSLog("[BleLibrary] disposeModule()")
+    print("[BleLibrary] disposeModule()")
     self.dispose()
     promise.resolve(nil)
   }
 
   func cancel(transactionId: String, promise: Promise) {
-    NSLog("[BleLibrary] cancel(%@)", transactionId)
+    print("[BleLibrary] cancel(\(transactionId)")
     self.transactionById[transactionId]?.cancel()
     promise.resolve(nil)
   }
@@ -253,9 +256,9 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
   // MARK: Scan
 
   func scanStart(serviceUuids: [String]?, promise: Promise) {
-    NSLog("[BleLibrary] scanStart(%@)", serviceUuids ?? [])
+    print("[BleLibrary] scanStart(\(serviceUuids, default: "[]")")
     guard self.isModuleInitialized else {
-      NSLog("[BleLibrary] manager is not initialized")
+      print("[BleLibrary] manager is not initialized")
       return promise.reject(
         ERROR_NOT_INITIALIZED,
         "call initModule first"
@@ -263,47 +266,54 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     }
 
     if self.manager?.isScanning == true {
-      NSLog("[BleLibrary] stopping existing scan...")
+      print("[BleLibrary] stopping existing scan...")
       self.manager?.stopScan()
     }
 
     var services: [CBUUID]? = nil
     if let ids = serviceUuids, !ids.isEmpty {
       services = ids.map { uuid in
-        NSLog("[BleLibrary] adding filter for %@", uuid)
+        print("[BleLibrary] adding filter for \(uuid)")
         return CBUUID(string: uuid)
       }
     }
 
     self.manager?.scanForPeripherals(withServices: services, options: [:])
-    NSLog("[BleLibrary] scan started")
+    print("[BleLibrary] scan started")
     promise.resolve(nil)
   }
 
   func scanStop(promise: Promise) {
-    NSLog("[BleLibrary] scanStop()")
+    print("[BleLibrary] scanStop()")
     guard self.isModuleInitialized else {
-      NSLog("[BleLibrary] manager is not initialized")
+      print("[BleLibrary] manager is not initialized")
       return promise.reject(
         ERROR_NOT_INITIALIZED,
         "call initModule first"
       )
     }
     if self.manager?.isScanning == true {
-      NSLog("[BleLibrary] stopping scan")
+      print("[BleLibrary] stopping scan")
       self.manager?.stopScan()
     } else {
-      NSLog("[BleLibrary] scan not running, nothing to stop!")
+      print("[BleLibrary] scan not running, nothing to stop!")
     }
     promise.resolve(nil)
   }
 
   // MARK: Connection
 
-  func connect(deviceId: String, mtu: Int, promise: Promise) {
-    NSLog("[BleLibrary] connect(%@, %d)", deviceId, mtu)
+  func connect(
+    deviceId: String,
+    mtu: Int,
+    options: [String: Any]?,
+    promise: Promise
+  ) {
+    print(
+      "[BleLibrary] connect(\(deviceId), \(mtu), \(options, default: "null"))"
+    )
     guard self.isModuleInitialized else {
-      NSLog("[BleLibrary] module is not initialized")
+      print("[BleLibrary] module is not initialized")
       return promise.reject(
         ERROR_NOT_INITIALIZED,
         "call initModule first"
@@ -311,7 +321,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     }
 
     if self.isConnected, let p = self.peripheral, let m = self.manager {
-      NSLog(
+      print(
         "[BleLibrary] a peripheral is already connected. Disconnect it first"
       )
       m.cancelPeripheralConnection(p)
@@ -326,7 +336,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     )
 
     guard let uuid = UUID(uuidString: deviceId) else {
-      NSLog("[BleLibrary] invalid UUID")
+      print("[BleLibrary] invalid UUID")
       return promise.reject(
         ERROR_INVALID_ARGUMENTS,
         "the deviceId must be a valid UUID"
@@ -342,10 +352,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
     let peripherals = m.retrievePeripherals(withIdentifiers: [uuid])
     guard let target = peripherals.first else {
-      NSLog(
-        "[BleLibrary] peripheral with UUID %@ not found",
-        uuid.uuidString
-      )
+      print("[BleLibrary] peripheral with UUID \(uuid.uuidString) not found")
       return promise.reject(
         ERROR_INVALID_ARGUMENTS,
         "peripheral with such UUID not found"
@@ -354,16 +361,37 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
     self.peripheral = target
     self.peripheral?.delegate = self
+    self.connectionSuccess = false
+    self.connectionPromise = promise
 
-    NSLog("[BleLibrary] requesting connect")
+    print("[BleLibrary] requesting connect")
     m.connect(target, options: nil)
 
-    self.connectionPromise = promise
+    if let o = options {
+      if let timeout = o["timeout"] as? Double {
+        print("[BleLibrary] Setting timeout to \(timeout)")
+        Timer.scheduledTimer(withTimeInterval: timeout / 1000.0, repeats: false)
+        { _ in
+          if !self.connectionSuccess {
+            print("[BleLibrary] Connection timeout expired")
+            m.cancelPeripheralConnection(target)
+
+            if let p = self.connectionPromise {
+              p.reject(
+                ERROR_OPERATION_CANCELED,
+                "timeout while connecting to device"
+              )
+              self.connectionPromise = nil
+            }
+          }
+        }
+      }
+    }
   }
 
   func disconnect(promise: Promise) {
-    NSLog("[BleLibrary] disconnect()")
-    
+    print("[BleLibrary] disconnect()")
+
     // Cancel connection promise if present
     if let p = connectionPromise {
       p.reject(ERROR_OPERATION_CANCELED, "Disconnection requested")
@@ -371,8 +399,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     }
 
     if self.isConnected, let m = self.manager, let p = self.peripheral {
-      NSLog("[BleLibrary] canceling connection")
-      
+      print("[BleLibrary] canceling connection")
+
       // Ensure all transactions are concluded
       self.cancelAllTransactions(
         code: ERROR_NOT_CONNECTED,
@@ -391,7 +419,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         ]
       )
     } else {
-      NSLog("[BleLibrary] no peripheral to disconnect")
+      print("[BleLibrary] no peripheral to disconnect")
     }
     promise.resolve(nil)
   }
@@ -400,7 +428,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
   func readRSSI(transactionId: String, promise: Promise) {
     guard self.isConnected, let p = self.peripheral else {
-      NSLog("[BleLibrary] device not connected")
+      print("[BleLibrary] device not connected")
       return promise.reject(ERROR_NOT_CONNECTED, "call connect first")
     }
 
@@ -428,15 +456,10 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
   ) {
     let serviceUuidLC = serviceUuid.lowercased()
     let charUuidLC = characteristic.lowercased()
-    NSLog(
-      "[BleLibrary] write(%@, %@, %lu)",
-      serviceUuidLC,
-      charUuidLC,
-      chunkSize
-    )
+    print("[BleLibrary] write(\(serviceUuidLC), \(charUuidLC), \(chunkSize)")
 
     guard self.isConnected else {
-      NSLog("[BleLibrary] device not connected")
+      print("[BleLibrary] device not connected")
       return promise.reject(ERROR_NOT_CONNECTED, "call connect first")
     }
 
@@ -446,10 +469,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         serviceUuid: serviceUuidLC
       )
     else {
-      NSLog(
-        "[BleLibrary] service %@ characteristic %@ not found",
-        serviceUuidLC,
-        charUuidLC
+      print(
+        "[BleLibrary] service \(serviceUuidLC) characteristic \(charUuidLC) not found"
       )
       return promise.reject(
         ERROR_INVALID_ARGUMENTS,
@@ -463,7 +484,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         "value must be base64 string"
       )
     }
-    NSLog("[BleLibrary] requesting write for %lu bytes", data.count)
+    print("[BleLibrary] requesting write for \(data.count) bytes")
 
     self.cancelPendingTransactionForChar(charUuidLC)
 
@@ -499,10 +520,10 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
   ) {
     let serviceUuidLC = serviceUuid.lowercased()
     let charUuidLC = characteristic.lowercased()
-    NSLog("[BleLibrary] read(%@, %@, %lu)", serviceUuidLC, charUuidLC, size)
+    print("[BleLibrary] read(\(serviceUuidLC), \(charUuidLC), \(size)")
 
     guard self.isConnected else {
-      NSLog("[BleLibrary] device not connected")
+      print("[BleLibrary] device not connected")
       return promise.reject(ERROR_NOT_CONNECTED, "call connect first")
     }
 
@@ -512,10 +533,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         serviceUuid: serviceUuidLC
       )
     else {
-      NSLog(
-        "[BleLibrary] service %@ characteristic %@ not found",
-        serviceUuidLC,
-        charUuidLC
+      print(
+        "[BleLibrary] service \(serviceUuidLC) characteristic \(charUuidLC) not found"
       )
       return promise.reject(
         ERROR_INVALID_ARGUMENTS,
@@ -548,10 +567,10 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
   ) {
     let serviceUuidLC = serviceUuid.lowercased()
     let charUuidLC = characteristic.lowercased()
-    NSLog("[BleLibrary] subscribe(%@, %@)", serviceUuidLC, charUuidLC)
+    print("[BleLibrary] subscribe(\(serviceUuidLC), \(charUuidLC)")
 
     guard self.isConnected else {
-      NSLog("[BleLibrary] device not connected")
+      print("[BleLibrary] device not connected")
       return promise.reject(ERROR_NOT_CONNECTED, "call connect first")
     }
 
@@ -561,10 +580,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         serviceUuid: serviceUuidLC
       )
     else {
-      NSLog(
-        "[BleLibrary] service %@ characteristic %@ not found",
-        serviceUuidLC,
-        charUuidLC
+      print(
+        "[BleLibrary] service \(serviceUuidLC) characteristic \(charUuidLC) not found"
       )
       return promise.reject(
         ERROR_INVALID_ARGUMENTS,
@@ -572,7 +589,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       )
     }
 
-    NSLog(
+    print(
       "[BleLibrary] waiting for callback didUpdateNotificationStateForCharacteristic"
     )
 
@@ -602,10 +619,10 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
   ) {
     let serviceUuidLC = serviceUuid.lowercased()
     let charUuidLC = characteristic.lowercased()
-    NSLog("[BleLibrary] unsubscribe(%@, %@)", serviceUuidLC, charUuidLC)
+    print("[BleLibrary] unsubscribe(\(serviceUuidLC), \(charUuidLC)")
 
     guard self.isConnected else {
-      NSLog("[BleLibrary] device not connected")
+      print("[BleLibrary] device not connected")
       return promise.reject(ERROR_NOT_CONNECTED, "call connect first")
     }
 
@@ -615,10 +632,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         serviceUuid: serviceUuidLC
       )
     else {
-      NSLog(
-        "[BleLibrary] service %@ characteristic %@ not found",
-        serviceUuidLC,
-        charUuidLC
+      print(
+        "[BleLibrary] service \(serviceUuidLC) characteristic \(charUuidLC) not found"
       )
       return promise.reject(
         ERROR_INVALID_ARGUMENTS,
@@ -626,7 +641,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       )
     }
 
-    NSLog(
+    print(
       "[BleLibrary] waiting for callback didUpdateNotificationStateForCharacteristic"
     )
 
@@ -675,15 +690,15 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
     if let m = manager {
       if m.isScanning {
-        NSLog("[BleLibrary] stopping scan")
+        print("[BleLibrary] stopping scan")
         m.stopScan()
       }
       if isConnected, let p = peripheral {
-        NSLog("[BleLibrary] disconnecting device")
+        print("[BleLibrary] disconnecting device")
         m.cancelPeripheralConnection(p)
       }
     }
-    
+
     // Cancel connection promise if present
     if let p = connectionPromise {
       p.reject(ERROR_OPERATION_CANCELED, "Disconnection requested")
@@ -701,19 +716,16 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
   // Called when CBCentralManager state changes
   public func centralManagerDidUpdateState(_ central: CBCentralManager) {
-    NSLog(
-      "[BleLibrary] CBCentralManager state changed %ld",
-      central.state.rawValue
-    )
+    print("[BleLibrary] CBCentralManager state changed \(central.state)")
 
     switch central.state {
     case .unknown, .resetting:
-      NSLog("[BleLibrary] BLE unsupported or internal error")
+      print("[BleLibrary] BLE unsupported or internal error")
       initTransaction?.fail(ERROR_INVALID_STATE, "invalid state")
       manager = nil
 
     case .unsupported:
-      NSLog("[BleLibrary] BLE unsupported on this device")
+      print("[BleLibrary] BLE unsupported on this device")
       initTransaction?.fail(
         ERROR_BLE_NOT_SUPPORTED,
         "BLE not supported on this device"
@@ -721,7 +733,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       manager = nil
 
     case .unauthorized:
-      NSLog("[BleLibrary] permission missing")
+      print("[BleLibrary] permission missing")
       initTransaction?.fail(
         ERROR_MISSING_PERMISSIONS,
         "missing BLE permissions"
@@ -729,16 +741,16 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       manager = nil
 
     case .poweredOff:
-      NSLog("[BleLibrary] BLE is turned OFF")
+      print("[BleLibrary] BLE is turned OFF")
       initTransaction?.fail(ERROR_BLE_NOT_ENABLED, "BLE is off")
       manager = nil
 
     case .poweredOn:
-      NSLog("[BleLibrary] BLE manager active")
+      print("[BleLibrary] BLE manager active")
       initTransaction?.succeed(nil)
 
     @unknown default:
-      NSLog("[BleLibrary] invalid state received")
+      print("[BleLibrary] invalid state received")
       initTransaction?.fail(ERROR_INVALID_STATE, "invalid state received")
       manager = nil
     }
@@ -754,10 +766,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     advertisementData: [String: Any],
     rssi RSSI: NSNumber
   ) {
-    NSLog(
-      "[BleLibrary] discovered peripheral %@ (adv data: %@)",
-      String(describing: peripheral),
-      String(describing: advertisementData)
+    print(
+      "[BleLibrary] discovered peripheral \(peripheral) (adv data: \(advertisementData)"
     )
 
     let result: [String: Any] = [
@@ -777,10 +787,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       ]
     ]
 
-    NSLog(
-      "[BleLibrary] sending scan result to JS %@",
-      String(describing: result)
-    )
+    print("[BleLibrary] sending scan result to JS \(result)")
     module.sendEvent(EVENT_SCAN_RESULT, result)
   }
 
@@ -791,10 +798,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     didFailToConnect peripheral: CBPeripheral,
     error: Error?
   ) {
-    NSLog(
-      "[BleLibrary] error connecting to peripheral %@ (error: %@)",
-      String(describing: peripheral),
-      String(describing: error)
+    print(
+      "[BleLibrary] error connecting to peripheral \(peripheral) (error: \(error, default: "nil")"
     )
 
     // Cancel connection promise if present
@@ -811,7 +816,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         "message": "connection to device failed",
         "ios": [
           "code": (error as NSError?)?.code as Any,
-          "description": (error as NSError?)?.description as Any,
+          "description": error?.localizedDescription ?? "null",
         ],
       ]
     )
@@ -821,9 +826,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     _ central: CBCentralManager,
     didConnect peripheral: CBPeripheral
   ) {
-    NSLog(
-      "[BleLibrary] connected to peripheral %@. Start service discovery",
-      String(describing: peripheral)
+    print(
+      "[BleLibrary] connected to peripheral \(peripheral). Start service discovery"
     )
 
     module.sendEvent(
@@ -844,13 +848,13 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     didDiscoverServices error: Error?
   ) {
     if let error = error {
-      NSLog(
-        "[BleLibrary] error discovering services (error: %@)",
-        String(describing: error)
-      )
+      print("[BleLibrary] error discovering services (error: \(error)")
       // Cancel connection promise if present
       if let p = connectionPromise {
-        p.reject(ERROR_OPERATION_CANCELED, "Error discovering services: \(error.localizedDescription)")
+        p.reject(
+          ERROR_OPERATION_CANCELED,
+          "Error discovering services: \(error.localizedDescription)"
+        )
         connectionPromise = nil
       }
 
@@ -870,7 +874,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       return
     }
 
-    NSLog("[BleLibrary] service discovery complete")
+    print("[BleLibrary] service discovery complete")
     guard let services = peripheral.services else {
       // Resolve connection promise if present
       if let p = connectionPromise {
@@ -893,14 +897,11 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     }
 
     for s in services {
-      NSLog(
-        "[BleLibrary] - service %@, discovering characteristics",
-        s.uuid.uuidString
-      )
+      print("[BleLibrary] - service \(s.uuid), discovering characteristics")
       peripheral.discoverCharacteristics(nil, for: s)
     }
 
-    NSLog(
+    print(
       "[BleLibrary] service discovery done, now waiting to discover all characteristics"
     )
   }
@@ -911,14 +912,15 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     error: Error?
   ) {
     if let error = error {
-      NSLog(
-        "[BleLibrary] error discovering characteristics for service %@ (error: %@)",
-        service.uuid.uuidString,
-        String(describing: error)
+      print(
+        "[BleLibrary] error discovering characteristics for service \(service.uuid) (error: \(error, default: "null")"
       )
       // Cancel connection promise if present
       if let p = connectionPromise {
-        p.reject(ERROR_OPERATION_CANCELED, "Error discovering characteristic for service \(service.uuid): \(error.localizedDescription)")
+        p.reject(
+          ERROR_OPERATION_CANCELED,
+          "Error discovering characteristic for service \(service.uuid): \(error.localizedDescription)"
+        )
         connectionPromise = nil
       }
 
@@ -939,16 +941,11 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       return
     }
 
-    NSLog(
-      "[BleLibrary] discovered characteristics for service %@",
-      service.uuid.uuidString
-    )
+    print("[BleLibrary] discovered characteristics for service \(service.uuid)")
     if let characteristics = service.characteristics {
       for c in characteristics {
-        NSLog(
-          "[BleLibrary] - characteristic %@ properties: %u",
-          c.uuid.uuidString,
-          c.properties.rawValue
+        print(
+          "[BleLibrary] - characteristic \(c.uuid) properties: \(c.properties.rawValue)"
         )
       }
     }
@@ -964,7 +961,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     }
 
     if !charRemainingToDiscover {
-      NSLog("[BleLibrary] all characteristics discovered")
+      print("[BleLibrary] all characteristics discovered")
       var servicesPayload: [[String: Any]] = []
       if let services = peripheral.services {
         for s in services {
@@ -996,13 +993,14 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         ]
       )
       // Resolve connection promise if present
+      connectionSuccess = true
       if let p = connectionPromise {
         p.resolve()
         connectionPromise = nil
       }
 
     } else {
-      NSLog(
+      print(
         "[BleLibrary] waiting for another service to complete characteristic discovery"
       )
     }
@@ -1014,10 +1012,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     error: Error?
   ) {
     if error == nil {
-      NSLog(
-        "[BleLibrary] disconnected from peripheral %@",
-        String(describing: peripheral)
-      )
+      print("[BleLibrary] disconnected from peripheral \(peripheral)")
       // Cancel connection promise if present
       if let p = connectionPromise {
         p.reject(ERROR_OPERATION_CANCELED, "Device has disconnected")
@@ -1034,10 +1029,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         ]
       )
     } else {
-      NSLog(
-        "[BleLibrary] disconnected from peripheral %@ failed (error: %@). Trigger new connection",
-        String(describing: peripheral),
-        String(describing: error)
+      print(
+        "[BleLibrary] disconnected from peripheral \(peripheral) failed (error: \(error, default: "null"). Trigger new connection"
       )
 
       module.sendEvent(
@@ -1068,7 +1061,10 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
     // Cancel connection promise if present
     if let p = connectionPromise {
-      p.reject(ERROR_OPERATION_CANCELED, "Device has disconnected: \(error?.localizedDescription ?? "no error")")
+      p.reject(
+        ERROR_OPERATION_CANCELED,
+        "Device has disconnected: \(error?.localizedDescription ?? "no error")"
+      )
       connectionPromise = nil
     }
 
@@ -1084,20 +1080,17 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     error: Error?
   ) {
     guard let t = readRssiTransaction else {
-      NSLog(
+      print(
         "[BleLibrary] read RSSI callback received but no transaction is in progress!"
       )
       return
     }
 
     if error == nil {
-      NSLog("[BleLibrary] read RSSI success, RSSI = %@", RSSI)
+      print("[BleLibrary] read RSSI success, RSSI = \(RSSI)")
       t.succeed(RSSI)
     } else {
-      NSLog(
-        "[BleLibrary] read RSSI error (error: %@)",
-        String(describing: error)
-      )
+      print("[BleLibrary] read RSSI error (error: \(error, default: "null")")
       t.fail(ERROR_GATT, (error! as NSError).description)
     }
     transactionById.removeValue(forKey: t.transactionId)
@@ -1117,20 +1110,17 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
     guard let write = writeOperationByCharUuid[charUuid], !write.isCompleted
     else {
-      NSLog(
-        "[BleLibrary] transaction for char %@ nil or completed!",
-        characteristic.uuid.uuidString
+      print(
+        "[BleLibrary] transaction for char \(characteristic.uuid) nil or completed!"
       )
       return
     }
 
     if error == nil {
-      NSLog("[BleLibrary] write value success")
+      print("[BleLibrary] write value success")
       if write.hasMoreChunks, let next = write.getChunk() {
-        NSLog(
-          "[BleLibrary] write another chunk of data (%lu/%lu)",
-          write.size,
-          write.written
+        print(
+          "[BleLibrary] write another chunk of data (\(write.size)/\(write.written)"
         )
         module.sendEvent(
           EVENT_PROGRESS,
@@ -1148,17 +1138,16 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
           type: .withResponse
         )
       } else {
-        NSLog("[BleLibrary] write is completed! Resolving Promise")
+        print("[BleLibrary] write is completed! Resolving Promise")
         write.succeed(write.data)
         transactionById.removeValue(forKey: write.transactionId)
         writeOperationByCharUuid.removeValue(forKey: charUuid)
       }
     } else {
-      NSLog(
-        "[BleLibrary] write value failure (error: %@)",
-        String(describing: error)
+      print(
+        "[BleLibrary] write value failure (error: \(error, default: "null")"
       )
-      write.fail(ERROR_GATT, (error! as NSError).description)
+      write.fail(ERROR_GATT, error?.localizedDescription ?? "")
       transactionById.removeValue(forKey: write.transactionId)
       writeOperationByCharUuid.removeValue(forKey: charUuid)
     }
@@ -1179,17 +1168,14 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
     if readIsPendingForChar, let read = read {
       if error == nil {
-        NSLog(
-          "[BleLibrary] read progress for characteristic %@",
-          characteristic.uuid.uuidString
+        print(
+          "[BleLibrary] read progress for characteristic \(characteristic.uuid)"
         )
         read.putChunk(characteristic.value ?? Data())
 
         if read.hasMoreData {
-          NSLog(
-            "[BleLibrary] need to receive more data (%ld/%ld) for characteristic, notify JS",
-            read.readCount,
-            Int(read.size)
+          print(
+            "[BleLibrary] need to receive more data (\(read.readCount)/\(read.size) for characteristic, notify JS"
           )
           module.sendEvent(
             EVENT_PROGRESS,
@@ -1201,21 +1187,20 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
               "transactionId": read.transactionId,
             ]
           )
-          NSLog(
+          print(
             "[BleLibrary] triggering another read, and waiting for didUpdateValueForCharacteristic"
           )
           peripheral.readValue(for: characteristic)
         } else {
-          NSLog("[BleLibrary] read is complete! Resolving Promise")
+          print("[BleLibrary] read is complete! Resolving Promise")
           let base64 = read.data.base64EncodedString()
           read.succeed(base64)
           transactionById.removeValue(forKey: read.transactionId)
           readOperationByCharUuid.removeValue(forKey: charUuid)
         }
       } else {
-        NSLog(
-          "[BleLibrary] read value failure (error: %@)",
-          String(describing: error)
+        print(
+          "[BleLibrary] read value failure (error: \(error, default: "null")"
         )
         read.fail(ERROR_GATT, "error reading characteristic")
         transactionById.removeValue(forKey: read.transactionId)
@@ -1224,9 +1209,8 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     } else {
       // Assume this is a notification update
       if error == nil {
-        NSLog(
-          "[BleLibrary] subscription updated characteristic %@, notify JS",
-          characteristic.uuid.uuidString
+        print(
+          "[BleLibrary] subscription updated characteristic \(characteristic.uuid), notify JS"
         )
         module.sendEvent(
           EVENT_CHAR_VALUE_CHANGED,
@@ -1238,7 +1222,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
           ]
         )
       } else {
-        NSLog(
+        print(
           "[BleLibrary] improbable state reached in read (no read pending but error present)"
         )
       }
@@ -1256,23 +1240,20 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     guard let transaction = notificationUpdateByCharUuid[charUuid],
       !transaction.isCompleted
     else {
-      NSLog(
+      print(
         "[BleLibrary] subscribe/unsubscribe callback received but transaction was canceled!"
       )
       return
     }
 
     if error == nil {
-      NSLog(
-        "[BleLibrary] characteristic %@ notification state updated",
-        characteristic.uuid.uuidString
+      print(
+        "[BleLibrary] characteristic \(characteristic.uuid) notification state updated"
       )
       transaction.succeed(nil)
     } else {
-      NSLog(
-        "[BleLibrary] characteristic %@ notification state update (error: %@)",
-        characteristic.uuid.uuidString,
-        String(describing: error)
+      print(
+        "[BleLibrary] characteristic \(characteristic.uuid) notification state update (error: \(error, default: "null")"
       )
       transaction.fail(ERROR_GATT, "error setting notification")
     }
@@ -1304,7 +1285,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
   private func cancelPendingTransactionForChar(_ charUuid: String) {
     if let pendingRead = readOperationByCharUuid[charUuid] {
-      NSLog(
+      print(
         "[BleLibrary] warning: a read for the characteristic was already in progress. Cancel it."
       )
       pendingRead.fail(
@@ -1315,7 +1296,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       transactionById.removeValue(forKey: pendingRead.transactionId)
     }
     if let pendingWrite = writeOperationByCharUuid[charUuid] {
-      NSLog(
+      print(
         "[BleLibrary] warning: a write for the characteristic was already in progress. Cancel it."
       )
       pendingWrite.fail(
@@ -1355,15 +1336,15 @@ public final class ReactNativeBleLibraryModule: Module {
 
     // Lifecycle hooks for event subscription
     OnStartObserving {
-      NSLog("[BleLibrary] NativeEventListener registered")
+      print("[BleLibrary] NativeEventListener registered")
     }
     OnStopObserving {
-      NSLog("[BleLibrary] NativeEventListener removed")
+      print("[BleLibrary] NativeEventListener removed")
     }
 
     // Dispose hook (called when module instance is being torn down)
     OnDestroy {
-      NSLog("[BleLibrary] invalidating native module")
+      print("[BleLibrary] invalidating native module")
       impl!.dispose()
     }
 
@@ -1395,8 +1376,13 @@ public final class ReactNativeBleLibraryModule: Module {
     // MARK: Connection
 
     AsyncFunction("connect") {
-      (deviceId: String, mtu: Int, promise: Promise) in
-      impl!.connect(deviceId: deviceId, mtu: mtu, promise: promise)
+      (deviceId: String, mtu: Int, options: [String: Any]?, promise: Promise) in
+      impl!.connect(
+        deviceId: deviceId,
+        mtu: mtu,
+        options: options,
+        promise: promise
+      )
     }
 
     AsyncFunction("disconnect") { (promise: Promise) in
