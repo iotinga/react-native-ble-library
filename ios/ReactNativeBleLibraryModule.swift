@@ -256,7 +256,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
   // MARK: Scan
 
   func scanStart(serviceUuids: [String]?, promise: Promise) {
-    print("[BleLibrary] scanStart(\(serviceUuids, default: "[]")")
+    print("[BleLibrary] scanStart(\(serviceUuids ?? [])")
     guard self.isModuleInitialized else {
       print("[BleLibrary] manager is not initialized")
       return promise.reject(
@@ -310,7 +310,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     promise: Promise
   ) {
     print(
-      "[BleLibrary] connect(\(deviceId), \(mtu), \(options, default: "null"))"
+      "[BleLibrary] connect(\(deviceId), \(mtu), \(options ?? [:])"
     )
     guard self.isModuleInitialized else {
       print("[BleLibrary] module is not initialized")
@@ -799,7 +799,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     error: Error?
   ) {
     print(
-      "[BleLibrary] error connecting to peripheral \(peripheral) (error: \(error, default: "nil")"
+      "[BleLibrary] error connecting to peripheral \(peripheral) (error: \(String(describing: error))"
     )
 
     // Cancel connection promise if present
@@ -913,7 +913,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
   ) {
     if let error = error {
       print(
-        "[BleLibrary] error discovering characteristics for service \(service.uuid) (error: \(error, default: "null")"
+        "[BleLibrary] error discovering characteristics for service \(service.uuid) (error: \(String(describing: error))"
       )
       // Cancel connection promise if present
       if let p = connectionPromise {
@@ -1030,7 +1030,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       )
     } else {
       print(
-        "[BleLibrary] disconnected from peripheral \(peripheral) failed (error: \(error, default: "null"). Trigger new connection"
+        "[BleLibrary] disconnected from peripheral \(peripheral) failed (error: \(String(describing: error)). Trigger new connection"
       )
 
       module.sendEvent(
@@ -1090,7 +1090,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       print("[BleLibrary] read RSSI success, RSSI = \(RSSI)")
       t.succeed(RSSI)
     } else {
-      print("[BleLibrary] read RSSI error (error: \(error, default: "null")")
+      print("[BleLibrary] read RSSI error (error: \(String(describing: error))")
       t.fail(ERROR_GATT, (error! as NSError).description)
     }
     transactionById.removeValue(forKey: t.transactionId)
@@ -1145,7 +1145,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       }
     } else {
       print(
-        "[BleLibrary] write value failure (error: \(error, default: "null")"
+        "[BleLibrary] write value failure (error: \(String(describing: error))"
       )
       write.fail(ERROR_GATT, error?.localizedDescription ?? "")
       transactionById.removeValue(forKey: write.transactionId)
@@ -1200,7 +1200,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         }
       } else {
         print(
-          "[BleLibrary] read value failure (error: \(error, default: "null")"
+          "[BleLibrary] read value failure (error: \(String(describing: error))"
         )
         read.fail(ERROR_GATT, "error reading characteristic")
         transactionById.removeValue(forKey: read.transactionId)
@@ -1253,7 +1253,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       transaction.succeed(nil)
     } else {
       print(
-        "[BleLibrary] characteristic \(characteristic.uuid) notification state update (error: \(error, default: "null")"
+        "[BleLibrary] characteristic \(characteristic.uuid) notification state update (error: \(String(describing: error))"
       )
       transaction.fail(ERROR_GATT, "error setting notification")
     }
@@ -1338,6 +1338,7 @@ public final class ReactNativeBleLibraryModule: Module {
     OnStartObserving {
       print("[BleLibrary] NativeEventListener registered")
     }
+
     OnStopObserving {
       print("[BleLibrary] NativeEventListener removed")
     }

@@ -7,6 +7,10 @@ import android.bluetooth.BluetoothGattService
 import android.content.Context
 import android.util.Base64
 import android.util.Log
+import androidx.core.graphics.component1
+import androidx.core.graphics.component2
+import androidx.core.graphics.component3
+import androidx.core.graphics.component4
 import expo.modules.kotlin.Promise
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.TimeoutableRequest
@@ -102,12 +106,16 @@ class RNBleManager(
     )
   }
 
+  // Function is called after connect to perform initialization before service discovery
   override fun initialize() {
     requestById.clear()
 
     val mtu = mtu
-    if (mtu != null) {
+    if (mtu != null && mtu != 0) {
       requestMtu(mtu)
+        .before {
+          emitConnectionStateChange(ConnectionState.REQUESTING_MTU, 0)
+        }
         .fail { device, status ->
           log(Log.WARN, "Error requesting MTU: $status")
         }
@@ -118,17 +126,22 @@ class RNBleManager(
     }
   }
 
+  // This function is called when services are invalidate, for example when the device
+  // disconnects.
   override fun onServicesInvalidated() {
     gatt = null
   }
 
+  // This function is after service discovery is done. Shall return true if all required
+  // services are available.
+  // Since I don't know the services to be used in advance I just return true
   override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
     this.gatt = gatt
 
     return true
   }
 
-  fun enqueue(transactionId: String, request: TimeoutableRequest) {
+  private fun enqueue(transactionId: String, request: TimeoutableRequest) {
     requestById[transactionId] = request
 
     request
@@ -146,8 +159,9 @@ class RNBleManager(
     this.mtu = mtu
 
     if (isConnected) {
+      log(Log.WARN, "Device already connected. Disconnecting it first.")
       disconnect()
-        .done { log(Log.INFO, "device disconnected") }
+        .done { log(Log.INFO, "Device disconnected") }
         .fail { device, status ->
           Log.w(
             LOG_TAG,
