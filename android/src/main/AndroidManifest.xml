@@ -9,6 +9,13 @@
   <!-- these permissions are required for Android <= 11 -->
   <uses-permission android:name="android.permission.BLUETOOTH"  android:maxSdkVersion="30" />
   <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
-  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
+
+  <!--
+    these are used only for Android <= 11. However I don't set a android:maxSdkVersion because,
+    if the app that this library is used in also requires these permissions, in the merged
+    manifest the maxSdkVersion is preserved and thus the app could not use the permission.
+    As I understand there is not a better way to do this...
+   -->
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 </manifest>
