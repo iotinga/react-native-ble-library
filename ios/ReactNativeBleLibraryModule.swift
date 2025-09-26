@@ -232,7 +232,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       self.notificationUpdateByCharUuid = [:]
       self.initTransaction = Transaction(
         transactionId: "_init",
-        promise: promise,
+        promise: promise
       )
       self.manager = CBCentralManager(delegate: self, queue: nil)
     } else {
@@ -437,7 +437,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
     let t = Transaction(
       transactionId: transactionId,
-      promise: promise,
+      promise: promise
     )
     self.readRssiTransaction = t
     self.transactionById[transactionId] = t
@@ -603,7 +603,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
     let t = Transaction(
       transactionId: transactionId,
-      promise: promise,
+      promise: promise
     )
     self.notificationUpdateByCharUuid[charUuidLC] = t
     self.transactionById[transactionId] = t
@@ -655,7 +655,7 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
 
     let t = Transaction(
       transactionId: transactionId,
-      promise: promise,
+      promise: promise
     )
     self.notificationUpdateByCharUuid[charUuidLC] = t
     self.transactionById[transactionId] = t
