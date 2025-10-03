@@ -1046,10 +1046,11 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         ]
       )
 
-      // Trigger a new connection to peripheral (mirrors original behavior)
-      if let p = self.peripheral {
-        manager?.connect(p, options: nil)
+      if let m = manager {
+        m.cancelPeripheralConnection(peripheral)
       }
+      self.peripheral = nil
+      self.connectionSuccess = false
     }
 
     // On disconnect all operations pending should fail!
