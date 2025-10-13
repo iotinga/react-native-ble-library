@@ -87,17 +87,6 @@ export type BleServicesInfo = {
   services: BleServiceInfo[]
 }
 
-export type BleConnectedDeviceInfo = {
-  /** ID of the device */
-  id: string
-
-  /** connection state */
-  connectionState: ConnectionState
-
-  /** list of services exposed from the device */
-  services?: BleServiceInfo[]
-}
-
 export interface BleManager {
   /**
    * Initializes the BLE stack:
@@ -151,11 +140,6 @@ export interface BleManager {
    * @returns a subscription for the event
    */
   onConnectionStateChanged(callback: (state: ConnectionState, error: BleError | null) => void): EventSubscription
-
-  /**
-   * @return the connected device info if any, otherwise null
-   */
-  get device(): BleConnectedDeviceInfo | null
 
   /**
    * Disconnects a previously connected device, if any.
@@ -243,14 +227,6 @@ export interface BleManager {
    * After this call do not attempt to use the BleManager instance without calling init() again!
    */
   dispose(): void
-}
-
-export type DemoState = {
-  /** services exposed by the device */
-  services: BleServiceInfo[]
-
-  /** devices returned in fake discovery */
-  devices: BleDeviceInfo[]
 }
 
 export interface ILogger {

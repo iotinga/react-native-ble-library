@@ -2,24 +2,13 @@ import { Buffer } from 'buffer'
 import { EventSubscription } from 'expo-modules-core'
 import { BleError, BleErrorCode } from './BleError'
 import ReactNativeBleLibraryModule from './ReactNativeBleLibraryModule'
-import {
-  ConnectionState,
-  ConnectOptions,
-  type BleConnectedDeviceInfo,
-  type BleDeviceInfo,
-  type BleManager,
-  type ILogger,
-} from './types'
+import { ConnectionState, ConnectOptions, type BleDeviceInfo, type BleManager, type ILogger } from './types'
 
 // as required by the standard
 const MAX_BLE_CHAR_SIZE = 512
 
 export class NativeBleManager implements BleManager {
-  private subscriptions: EventSubscription[] = []
-
   private initialized = false
-  private connectedDevice: BleConnectedDeviceInfo | null = null
-
   private nSubscriptions = new Map<string, number>()
 
   constructor(private readonly logger?: ILogger) {}
@@ -36,20 +25,6 @@ export class NativeBleManager implements BleManager {
 
   async init(): Promise<void> {
     if (!this.initialized) {
-      this.subscriptions.push(
-        ReactNativeBleLibraryModule.addListener('onConnectionStateChanged', ({ state, services }) => {
-          this.logger?.debug('[BleManager] connection state changed', state)
-
-          if (this.device) {
-            this.device.connectionState = state
-
-            if (services) {
-              this.device.services = services
-            }
-          }
-        })
-      )
-
       this.logger?.info('[BleManager] initializing module...')
       try {
         await ReactNativeBleLibraryModule.initModule()
@@ -57,8 +32,6 @@ export class NativeBleManager implements BleManager {
         this.initialized = true
       } catch (e: any) {
         this.logger?.error('[BleManager] error initializing module', e)
-        this.removeSubscriptions()
-
         throw new BleError(e.code, e.message)
       }
     }
@@ -141,22 +114,12 @@ export class NativeBleManager implements BleManager {
 
     this.logger?.info(`[BleManager] execute connect(${id}, ${mtu})`)
 
-    // now we should be in a state where it's safe to connect the device (hopefully)
-    this.connectedDevice = null
-
     try {
       await ReactNativeBleLibraryModule.connect(id, mtu ?? 0, options)
 
       this.logger?.debug(`[BleManager] starting connection to ${id}`)
-
-      this.connectedDevice = {
-        id,
-        connectionState: ConnectionState.CONNECTING_TO_DEVICE,
-      }
       this.nSubscriptions.clear()
     } catch (e: any) {
-      this.connectedDevice = null
-
       throw new BleError(e.code, e.message)
     }
   }
@@ -170,7 +133,6 @@ export class NativeBleManager implements BleManager {
     } catch (e: any) {
       throw new BleError(e.code, e.message)
     } finally {
-      this.connectedDevice = null
       this.nSubscriptions.clear()
     }
   }
@@ -373,25 +335,11 @@ export class NativeBleManager implements BleManager {
   }
 
   dispose(): void {
-    this.removeSubscriptions()
-
     if (this.initialized) {
       this.logger?.info('[BleManager] terminating manager')
       ReactNativeBleLibraryModule.disposeModule()
       this.initialized = false
-      this.connectedDevice = null
       this.nSubscriptions.clear()
     }
-  }
-
-  get device() {
-    return this.connectedDevice
-  }
-
-  private removeSubscriptions() {
-    for (const subscription of this.subscriptions) {
-      subscription.remove()
-    }
-    this.subscriptions = []
   }
 }
