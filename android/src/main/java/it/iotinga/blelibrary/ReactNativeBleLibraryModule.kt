@@ -205,7 +205,7 @@ class ReactNativeBleLibraryModule : Module() {
       Log.d(LOG_TAG, "disconnect()")
 
       ensureManagerInitialized(promise) { manager ->
-        manager.disconnect()
+        manager.disconnect(promise)
       }
     }
 
