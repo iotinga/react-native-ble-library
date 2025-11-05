@@ -139,7 +139,9 @@ export interface BleManager {
    * @param callback callback to invoke
    * @returns a subscription for the event
    */
-  onConnectionStateChanged(callback: (state: ConnectionState, error: BleError | null) => void): EventSubscription
+  onConnectionStateChanged(
+    callback: (state: ConnectionState, error: BleError | null, services?: BleServiceInfo[]) => void
+  ): EventSubscription
 
   /**
    * Disconnects a previously connected device, if any.

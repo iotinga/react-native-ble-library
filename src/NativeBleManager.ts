@@ -2,7 +2,14 @@ import { Buffer } from 'buffer'
 import { EventSubscription } from 'expo-modules-core'
 import { BleError, BleErrorCode } from './BleError'
 import ReactNativeBleLibraryModule from './ReactNativeBleLibraryModule'
-import { ConnectionState, ConnectOptions, type BleDeviceInfo, type BleManager, type ILogger } from './types'
+import {
+  BleServiceInfo,
+  ConnectionState,
+  ConnectOptions,
+  type BleDeviceInfo,
+  type BleManager,
+  type ILogger,
+} from './types'
 
 // as required by the standard
 const MAX_BLE_CHAR_SIZE = 512
@@ -37,14 +44,19 @@ export class NativeBleManager implements BleManager {
     }
   }
 
-  onConnectionStateChanged(callback: (state: ConnectionState, error: BleError | null) => void): EventSubscription {
-    return ReactNativeBleLibraryModule.addListener('onConnectionStateChanged', ({ state, error, message }) => {
-      if (error) {
-        callback(state, new BleError(error as BleErrorCode, message))
-      } else {
-        callback(state, null)
+  onConnectionStateChanged(
+    callback: (state: ConnectionState, error: BleError | null, services?: BleServiceInfo[]) => void
+  ): EventSubscription {
+    return ReactNativeBleLibraryModule.addListener(
+      'onConnectionStateChanged',
+      ({ state, error, services, message }) => {
+        if (error) {
+          callback(state, new BleError(error as BleErrorCode, message), services)
+        } else {
+          callback(state, null, services)
+        }
       }
-    })
+    )
   }
 
   scan(
