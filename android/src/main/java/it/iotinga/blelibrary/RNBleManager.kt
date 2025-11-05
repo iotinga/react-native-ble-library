@@ -218,6 +218,7 @@ class RNBleManager(
         }
         .invalid {
           log(Log.WARN, "Error disconnecting device: invalid callback")
+          promise.reject(BleError.ERROR_INVALID_STATE.name, "Invalid disconnect request", null)
         }
         .then { device ->
           log(Log.INFO, "Disconnect request finished")
