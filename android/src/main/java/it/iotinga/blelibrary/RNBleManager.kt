@@ -208,14 +208,19 @@ class RNBleManager(
   fun disconnect(promise: Promise) {
     if (isConnected) {
       disconnect()
-        .timeout(5_000)
-        .done {
+        .done { device ->
           log(Log.INFO, "Device disconnected")
           promise.resolve()
         }
         .fail { device, status ->
           log(Log.WARN, "Error disconnecting device")
           promise.reject(BleError.ERROR_GATT.name, "Error disconnecting device: $status", null)
+        }
+        .invalid {
+          log(Log.WARN, "Error disconnecting device: invalid callback")
+        }
+        .then { device ->
+          log(Log.INFO, "Disconnect request finished")
         }
         .timeout(TIMEOUT_MS)
         .enqueue()
