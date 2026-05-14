@@ -33,8 +33,8 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
 
-      - name: Bump version
-        run: npm version --no-git-tag-version ${{ steps.version.outputs.new_tag }}
+      #- name: Bump version
+      #  run: npm version --no-git-tag-version ${{ steps.version.outputs.new_tag }}
 
       - name: Commit new version
         continue-on-error: true
