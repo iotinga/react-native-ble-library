@@ -1,6 +1,9 @@
 {
   "name": "@iotinga/react-native-ble-library",
   "version": "2.1.3",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Allows connection to BLE devices",
   "main": "build/index.js",
   "types": "build/index.d.ts",
