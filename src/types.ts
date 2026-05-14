@@ -64,6 +64,20 @@ export const BleCharacteristicProperty = {
   INDICATE: 0x20,
 } as const
 
+/**
+ * GATT write type for {@link BleManager.write}.
+ *
+ * - `withResponse` (default, backward compatible): each chunk is acknowledged
+ *   by the peripheral at the GATT level. Reliable but limited to one packet
+ *   per connection interval (slow on iOS due to OS-imposed intervals).
+ * - `withoutResponse`: chunks are fire-and-forget at the GATT layer. Much faster
+ *   on iOS/macOS but requires the characteristic to expose the
+ *   `WRITE_WITHOUT_RESPONSE` property AND requires the application layer to
+ *   implement its own flow control (e.g. a PRN-style ack via a notification
+ *   characteristic) to avoid overrunning the peripheral.
+ */
+export type BleWriteType = 'withResponse' | 'withoutResponse'
+
 export type BleCharacteristicInfo = {
   /** uuid of the characteristic */
   uuid: string
@@ -176,8 +190,14 @@ export interface BleManager {
    * Requests a write for the specified characteristic. If the characteristic is chunked the
    * write is split in chunks of chunkSize. The characteristic is then written multiple times till
    * all the message is transmitted.
-   * From one write to another we wait for the device to send an ACK to confirm it has
-   * received the message chunk.
+   *
+   * The `writeType` parameter controls how chunks are written at the GATT layer:
+   * - `'withResponse'` (default): each chunk waits for a peripheral ACK before the next one
+   *   is sent. Identical to the historical behavior of this library.
+   * - `'withoutResponse'`: chunks are fire-and-forget at the GATT layer (no per-chunk ACK).
+   *   Significantly faster on iOS (no per-chunk wait on connection interval), but the
+   *   peripheral must support the `WRITE_WITHOUT_RESPONSE` property and the caller is
+   *   responsible for any application-level flow control (e.g. PRN via a notification).
    *
    * @param service UUID of the service to write
    * @param characteristic UUID of the characteristic to write
@@ -186,6 +206,7 @@ export interface BleManager {
    *  greater than chunk size it will perform multiple writes till all the data is written. Default: 512 bytes
    * @param progress callback to report the write progress to the application
    * @param abortSignal param that allows to cancel a long async write
+   * @param writeType GATT write type, default `'withResponse'` for backward compatibility
    * @throws {BleError} in case of an error
    */
   write(
@@ -194,7 +215,8 @@ export interface BleManager {
     value: Uint8Array,
     chunkSize?: number,
     progress?: (current: number, total: number) => void,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    writeType?: BleWriteType
   ): Promise<void>
 
   /**

@@ -30,7 +30,14 @@ declare class ReactNativeBleLibraryModule extends NativeModule<ReactNativeBleLib
   scanStop(): Promise<void>
   connect(id: string, mtu: number, options?: ConnectOptions): Promise<BleServicesInfo>
   disconnect(): Promise<void>
-  write(transactionId: string, service: string, characteristic: string, value: string, chunkSize: number): Promise<void>
+  write(
+    transactionId: string,
+    service: string,
+    characteristic: string,
+    value: string,
+    chunkSize: number,
+    writeType: string
+  ): Promise<void>
   read(transactionId: string, service: string, characteristic: string, size: number): Promise<string>
   subscribe(transactionId: string, service: string, characteristic: string): Promise<void>
   unsubscribe(transactionId: string, service: string, characteristic: string): Promise<void>

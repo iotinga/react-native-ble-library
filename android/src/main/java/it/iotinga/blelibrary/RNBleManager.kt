@@ -470,15 +470,24 @@ class RNBleManager(
     characteristic: String,
     packet: ByteArray,
     chunkSize: Int,
+    writeType: String,
     promise: Promise
   ) {
     var written = 0
     var lastProgressSentTime = 0L
+    // Map TS writeType ('withResponse' | 'withoutResponse') to the underlying
+    // GATT write type constant. Default to WRITE_TYPE_DEFAULT (with response)
+    // for backward compatibility with any caller that doesn't pass the new
+    // parameter.
+    val gattWriteType = when (writeType) {
+      "withoutResponse" -> BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+      else -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+    }
     findCharacteristic(promise, service, characteristic) { characteristic ->
       enqueue(
         transactionId, writeCharacteristic(
           characteristic, packet,
-          BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+          gattWriteType
         )
           .split({ message, index, maxLength ->
             val packetSize = min(maxLength, chunkSize)

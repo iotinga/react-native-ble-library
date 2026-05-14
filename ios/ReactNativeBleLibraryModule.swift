@@ -14,7 +14,7 @@
 //      scanStart(serviceUuids), scanStop()
 //      connect(deviceId, mtu), disconnect()
 //      readRSSI(transactionId)
-//      write(transactionId, serviceUuid, characteristic, value, chunkSize)
+//      write(transactionId, serviceUuid, characteristic, value, chunkSize, writeType)
 //      read(transactionId, serviceUuid, characteristic, size)
 //      subscribe(transactionId, serviceUuid, characteristic)
 //      unsubscribe(transactionId, serviceUuid, characteristic)
@@ -149,33 +149,56 @@ private final class PendingRead: Transaction {
 }
 
 // Matches PendingWrite.h/.m
+//
+// Tracks both the bytes already queued ("queued") to CoreBluetooth and the
+// bytes confirmed by the peripheral ("acked"). With `.withResponse` the two
+// stay in lock-step (one chunk queued, wait for didWriteValueFor, queue the
+// next). With `.withoutResponse` CoreBluetooth does NOT invoke
+// didWriteValueFor, so "acked" only advances when the OS reports backpressure
+// release via peripheralIsReady(toSendWriteWithoutResponse:). In that mode the
+// promise resolves as soon as all chunks have been queued (the OS guarantees
+// delivery to its tx queue; application-level reliability must be implemented
+// by the caller, e.g. via a PRN notification).
 private final class PendingWrite: Transaction {
   let data: Data
   let size: Int
-  private(set) var written: Int = 0
+  private(set) var queued: Int = 0
   let chunkSize: Int
+  let writeType: CBCharacteristicWriteType
+  weak var characteristic: CBCharacteristic?
 
-  var hasMoreChunks: Bool { written < size }
+  var hasMoreChunks: Bool { queued < size }
+
+  // Backward-compatible alias for the historical "written" counter. Other
+  // call sites used it to report progress; for `.withResponse` it still
+  // represents the chunks confirmed by the peripheral (since we only advance
+  // when didWriteValueFor fires). For `.withoutResponse` it represents the
+  // bytes queued so far.
+  var written: Int { queued }
 
   init(
     transactionId: String,
     promise: Promise,
     data: Data,
-    chunkSize: UInt
+    chunkSize: UInt,
+    writeType: CBCharacteristicWriteType = .withResponse,
+    characteristic: CBCharacteristic? = nil
   ) {
     self.data = data
     self.size = data.count
     self.chunkSize = Int(chunkSize)
+    self.writeType = writeType
+    self.characteristic = characteristic
     super.init(transactionId: transactionId, promise: promise)
   }
 
   func getChunk() -> Data? {
     guard hasMoreChunks else { return nil }
     var length = chunkSize
-    let remaining = size - written
+    let remaining = size - queued
     if length > remaining { length = remaining }
-    let range = written..<(written + length)
-    written += length
+    let range = queued..<(queued + length)
+    queued += length
     return data.subdata(in: range)
   }
 }
@@ -452,11 +475,12 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
     characteristic: String,
     value: String,
     chunkSize: UInt,
+    writeType: String,
     promise: Promise
   ) {
     let serviceUuidLC = serviceUuid.lowercased()
     let charUuidLC = characteristic.lowercased()
-    print("[BleLibrary] write(\(serviceUuidLC), \(charUuidLC), \(chunkSize)")
+    print("[BleLibrary] write(\(serviceUuidLC), \(charUuidLC), \(chunkSize), \(writeType))")
 
     guard self.isConnected else {
       print("[BleLibrary] device not connected")
@@ -484,7 +508,12 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
         "value must be base64 string"
       )
     }
-    print("[BleLibrary] requesting write for \(data.count) bytes")
+    // Map the JS-level write type string to the CoreBluetooth enum. Any value
+    // other than the explicit "withoutResponse" falls back to .withResponse to
+    // preserve the historical, backward-compatible default.
+    let cbWriteType: CBCharacteristicWriteType =
+      (writeType == "withoutResponse") ? .withoutResponse : .withResponse
+    print("[BleLibrary] requesting write for \(data.count) bytes (type: \(cbWriteType == .withResponse ? "withResponse" : "withoutResponse"))")
 
     self.cancelPendingTransactionForChar(charUuidLC)
 
@@ -492,21 +521,94 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       transactionId: transactionId,
       promise: promise,
       data: data,
-      chunkSize: chunkSize
+      chunkSize: chunkSize,
+      writeType: cbWriteType,
+      characteristic: c
     )
 
     self.transactionById[transactionId] = write
     self.writeOperationByCharUuid[charUuidLC] = write
 
-    // Start writing first chunk (with response)
-    if let chunk = write.getChunk() {
-      self.peripheral?.writeValue(chunk, for: c, type: .withResponse)
-    } else {
-      // Nothing to write, resolve immediately
+    if cbWriteType == .withResponse {
+      // Backward-compatible path: dispatch identical to the historical
+      // implementation. The first chunk is sent here; subsequent chunks are
+      // chained inside peripheral(_:didWriteValueFor:error:). Optional
+      // chaining on self.peripheral is preserved to match the prior
+      // observable behavior (no synchronous error if peripheral is nil; the
+      // transaction will instead be released by cancelAllTransactions on
+      // disconnect).
+      if let chunk = write.getChunk() {
+        self.peripheral?.writeValue(chunk, for: c, type: .withResponse)
+      } else {
+        // Empty payload: resolve immediately.
+        write.succeed(Data())
+        self.transactionById.removeValue(forKey: transactionId)
+        self.writeOperationByCharUuid.removeValue(forKey: charUuidLC)
+      }
+      return
+    }
+
+    // .withoutResponse path: use the burst pump.
+    // Empty payload still resolves immediately here too, just for symmetry.
+    guard write.hasMoreChunks else {
       write.succeed(Data())
       self.transactionById.removeValue(forKey: transactionId)
       self.writeOperationByCharUuid.removeValue(forKey: charUuidLC)
+      return
     }
+    self.pumpWriteWithoutResponse(write, characteristic: c)
+  }
+
+  // Drives chunk transmission for an active PendingWrite in
+  // .withoutResponse mode. With write-without-response CoreBluetooth does
+  // not invoke peripheral(_:didWriteValueFor:error:), so we cannot chain
+  // chunks from that callback. Instead we enqueue as many chunks as the
+  // OS will accept (canSendWriteWithoutResponse == true). When the OS
+  // buffer saturates we return and wait for
+  // peripheralIsReady(toSendWriteWithoutResponse:), which calls back into
+  // this function to drain the remainder.
+  //
+  // The promise resolves as soon as the last chunk has been handed off to
+  // CoreBluetooth's tx queue: there is no GATT-level ACK to wait for in
+  // .withoutResponse mode, so application-level reliability (e.g. PRN via
+  // a notification characteristic) is the caller's responsibility.
+  private func pumpWriteWithoutResponse(
+    _ write: PendingWrite,
+    characteristic c: CBCharacteristic
+  ) {
+    guard !write.isCompleted else { return }
+    guard let p = self.peripheral else {
+      write.fail(ERROR_NOT_CONNECTED, "no peripheral when pumping write")
+      transactionById.removeValue(forKey: write.transactionId)
+      writeOperationByCharUuid.removeValue(forKey: c.uuid.uuidString.lowercased())
+      return
+    }
+
+    while write.hasMoreChunks, p.canSendWriteWithoutResponse {
+      guard let chunk = write.getChunk() else { break }
+      p.writeValue(chunk, for: c, type: .withoutResponse)
+
+      let charUuid = c.uuid.uuidString.lowercased()
+      let serviceUuid = c.service?.uuid.uuidString.lowercased() ?? ""
+      module.sendEvent(
+        EVENT_PROGRESS,
+        [
+          "characteristic": charUuid,
+          "service": serviceUuid,
+          "current": write.written,
+          "total": write.size,
+          "transactionId": write.transactionId,
+        ]
+      )
+    }
+
+    if !write.hasMoreChunks {
+      print("[BleLibrary] withoutResponse write fully queued, resolving promise")
+      write.succeed(write.data)
+      transactionById.removeValue(forKey: write.transactionId)
+      writeOperationByCharUuid.removeValue(forKey: c.uuid.uuidString.lowercased())
+    }
+    // else: wait for peripheralIsReady(toSendWriteWithoutResponse:) to resume
   }
 
   // MARK: Read
@@ -1117,6 +1219,12 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       return
     }
 
+    // didWriteValueFor is only delivered for .withResponse writes. If a
+    // .withoutResponse PendingWrite somehow ended up routed here, do not
+    // advance it (its lifecycle is managed in pumpWriteWithoutResponse and
+    // peripheralIsReady).
+    guard write.writeType == .withResponse else { return }
+
     if error == nil {
       print("[BleLibrary] write value success")
       if write.hasMoreChunks, let next = write.getChunk() {
@@ -1151,6 +1259,27 @@ private final class BleLibraryImpl: NSObject, CBCentralManagerDelegate,
       write.fail(ERROR_GATT, error?.localizedDescription ?? "")
       transactionById.removeValue(forKey: write.transactionId)
       writeOperationByCharUuid.removeValue(forKey: charUuid)
+    }
+  }
+
+  // CBPeripheralDelegate: called when the CoreBluetooth tx buffer has drained
+  // enough that writeValue(_:for:type:.withoutResponse) can accept more data.
+  // We iterate all active PendingWrites in .withoutResponse mode and resume
+  // pumping chunks for each (in practice there's usually at most one).
+  public func peripheralIsReady(
+    toSendWriteWithoutResponse peripheral: CBPeripheral
+  ) {
+    for (charUuid, write) in writeOperationByCharUuid {
+      guard !write.isCompleted, write.writeType == .withoutResponse else {
+        continue
+      }
+      if let c = write.characteristic {
+        pumpWriteWithoutResponse(write, characteristic: c)
+      } else {
+        print(
+          "[BleLibrary] withoutResponse write for \(charUuid) has no characteristic ref, skipping resume"
+        )
+      }
     }
   }
 
@@ -1406,6 +1535,7 @@ public final class ReactNativeBleLibraryModule: Module {
         characteristic: String,
         value: String,
         chunkSize: UInt,
+        writeType: String,
         promise: Promise
       ) in
       impl!.write(
@@ -1414,6 +1544,7 @@ public final class ReactNativeBleLibraryModule: Module {
         characteristic: characteristic,
         value: value,
         chunkSize: chunkSize,
+        writeType: writeType,
         promise: promise
       )
     }

@@ -8,6 +8,7 @@ import {
   ConnectOptions,
   type BleDeviceInfo,
   type BleManager,
+  type BleWriteType,
   type ILogger,
 } from './types'
 
@@ -207,7 +208,8 @@ export class NativeBleManager implements BleManager {
     value: Uint8Array,
     chunkSize = MAX_BLE_CHAR_SIZE,
     progress?: (current: number, total: number) => void,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    writeType: BleWriteType = 'withResponse'
   ): Promise<void> {
     this.ensureInitialized()
 
@@ -217,7 +219,7 @@ export class NativeBleManager implements BleManager {
     this.logger?.info(
       `[BleManager] execute write(${characteristic}, ${Buffer.from(value.subarray(0, 50)).toString('base64')} (len: ${
         value.length
-      }))`
+      }, type: ${writeType}))`
     )
 
     const transactionId = this.getTransactionId()
@@ -257,7 +259,8 @@ export class NativeBleManager implements BleManager {
         service,
         characteristic,
         Buffer.from(value).toString('base64'),
-        chunkSize
+        chunkSize,
+        writeType
       )
     } catch (e: any) {
       throw new BleError(e.code, e.message)

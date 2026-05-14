@@ -238,16 +238,17 @@ class ReactNativeBleLibraryModule : Module() {
       characteristic: String,
       value: String,
       chunkSize: Int,
+      writeType: String,
       promise: Promise
       ->
       Log.d(
         LOG_TAG,
-        "write($service, $characteristic, ${value.length}, $chunkSize)"
+        "write($service, $characteristic, ${value.length}, $chunkSize, $writeType)"
       )
 
       ensureManagerInitialized(promise) { manager ->
         val data = Base64.decode(value, Base64.DEFAULT)
-        manager.writeChar(transactionId, service, characteristic, data, chunkSize, promise)
+        manager.writeChar(transactionId, service, characteristic, data, chunkSize, writeType, promise)
       }
     }
 
