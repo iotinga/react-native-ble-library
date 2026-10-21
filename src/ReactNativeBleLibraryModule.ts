@@ -1,6 +1,7 @@
 import { NativeModule, requireNativeModule } from 'expo'
+import { Platform } from 'react-native'
 import { BleErrorCode } from './BleError'
-import { BleDeviceInfo, ConnectionState, BleServiceInfo, BleServicesInfo, ConnectOptions } from './types'
+import { BleDeviceInfo, BleServiceInfo, BleServicesInfo, ConnectionState, ConnectOptions } from './types'
 
 export type ReactNativeBleLibraryModuleEvents = {
   onError(data: { error: BleErrorCode; message: string }): void
@@ -45,5 +46,11 @@ declare class ReactNativeBleLibraryModule extends NativeModule<ReactNativeBleLib
   cancel(transactionId: string): Promise<void>
 }
 
-// This call loads the native module object from the JSI.
-export default requireNativeModule<ReactNativeBleLibraryModule>('ReactNativeBleLibrary')
+let module: ReactNativeBleLibraryModule | undefined
+
+if (Platform.OS !== 'web') {
+  // This call loads the native module object from the JSI if not running on web
+  module = requireNativeModule<ReactNativeBleLibraryModule>('ReactNativeBleLibrary')
+}
+
+export default module

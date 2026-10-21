@@ -1,5 +1,5 @@
-import type { BleError } from './BleError'
 import type { EventSubscription } from 'expo-modules-core'
+import type { BleError } from './BleError'
 
 export type BleDeviceInfo = {
   /** ID of the device. On Android this is a MAC address, on iOS it's an opaque UUID */

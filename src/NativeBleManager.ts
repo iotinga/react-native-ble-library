@@ -15,6 +15,14 @@ import {
 // as required by the standard
 const MAX_BLE_CHAR_SIZE = 512
 
+function getNativeModule() {
+  if (ReactNativeBleLibraryModule === undefined) {
+    throw new Error(`Native module not found (running on web?)`)
+  }
+
+  return ReactNativeBleLibraryModule
+}
+
 export class NativeBleManager implements BleManager {
   private initialized = false
   private nSubscriptions = new Map<string, number>()
@@ -35,7 +43,7 @@ export class NativeBleManager implements BleManager {
     if (!this.initialized) {
       this.logger?.info('[BleManager] initializing module...')
       try {
-        await ReactNativeBleLibraryModule.initModule()
+        await getNativeModule().initModule()
         this.logger?.info('[BleManager] module initialized')
         this.initialized = true
       } catch (e: any) {
@@ -48,16 +56,13 @@ export class NativeBleManager implements BleManager {
   onConnectionStateChanged(
     callback: (state: ConnectionState, error: BleError | null, services?: BleServiceInfo[]) => void
   ): EventSubscription {
-    return ReactNativeBleLibraryModule.addListener(
-      'onConnectionStateChanged',
-      ({ state, error, services, message }) => {
-        if (error) {
-          callback(state, new BleError(error as BleErrorCode, message), services)
-        } else {
-          callback(state, null, services)
-        }
+    return getNativeModule().addListener('onConnectionStateChanged', ({ state, error, services, message }) => {
+      if (error) {
+        callback(state, new BleError(error as BleErrorCode, message), services)
+      } else {
+        callback(state, null, services)
       }
-    )
+    })
   }
 
   scan(
@@ -68,7 +73,7 @@ export class NativeBleManager implements BleManager {
     this.ensureInitialized()
 
     const subscriptions = [
-      ReactNativeBleLibraryModule.addListener('onScanResult', data => {
+      getNativeModule().addListener('onScanResult', data => {
         onDiscover(
           data.devices.map(d => ({
             ...d,
@@ -79,7 +84,7 @@ export class NativeBleManager implements BleManager {
         )
       }),
 
-      ReactNativeBleLibraryModule.addListener('onError', data => {
+      getNativeModule().addListener('onError', data => {
         this.logger?.error('[BleManager] scan error', data)
 
         if (data.error === BleErrorCode.ERROR_SCAN && onError !== undefined) {
@@ -89,7 +94,7 @@ export class NativeBleManager implements BleManager {
     ]
 
     const startScan = async () => {
-      await ReactNativeBleLibraryModule.scanStart(serviceUuids?.map(s => s.toLowerCase()))
+      await getNativeModule().scanStart(serviceUuids?.map(s => s.toLowerCase()))
     }
 
     startScan()
@@ -109,7 +114,8 @@ export class NativeBleManager implements BleManager {
 
         this.logger?.info('[BleManager] stopping scan...')
 
-        ReactNativeBleLibraryModule.scanStop()
+        getNativeModule()
+          .scanStop()
           .catch(e => {
             this.logger?.error('[BleManager] error stopping scan')
 
@@ -128,7 +134,7 @@ export class NativeBleManager implements BleManager {
     this.logger?.info(`[BleManager] execute connect(${id}, ${mtu})`)
 
     try {
-      await ReactNativeBleLibraryModule.connect(id, mtu ?? 0, options)
+      await getNativeModule().connect(id, mtu ?? 0, options)
 
       this.logger?.debug(`[BleManager] starting connection to ${id}`)
       this.nSubscriptions.clear()
@@ -142,7 +148,7 @@ export class NativeBleManager implements BleManager {
 
     this.logger?.info('[BleManager] execute disconnect()')
     try {
-      await ReactNativeBleLibraryModule.disconnect()
+      await getNativeModule().disconnect()
     } catch (e: any) {
       throw new BleError(e.code, e.message)
     } finally {
@@ -167,7 +173,8 @@ export class NativeBleManager implements BleManager {
     const onAbort = () => {
       this.logger?.info(`[BleManager] canceling read(${service}, ${characteristic}, ${size})`)
 
-      ReactNativeBleLibraryModule.cancel(transactionId)
+      getNativeModule()
+        .cancel(transactionId)
         .then(() => {
           this.logger?.info(`Cancelled transaction ${transactionId}`)
         })
@@ -180,7 +187,7 @@ export class NativeBleManager implements BleManager {
 
     let progressSubscription: EventSubscription | undefined
     if (progress !== undefined) {
-      progressSubscription = ReactNativeBleLibraryModule.addListener('onProgress', data => {
+      progressSubscription = getNativeModule().addListener('onProgress', data => {
         if (data.transactionId === transactionId) {
           this.logger?.info('[BleManager] read progress', data)
 
@@ -191,7 +198,7 @@ export class NativeBleManager implements BleManager {
 
     let result: string
     try {
-      result = await ReactNativeBleLibraryModule.read(transactionId, service, characteristic, size ?? 0)
+      result = await getNativeModule().read(transactionId, service, characteristic, size ?? 0)
     } catch (e: any) {
       throw new BleError(e.code, e.message)
     } finally {
@@ -230,7 +237,8 @@ export class NativeBleManager implements BleManager {
         )} (len: ${value.length}))`
       )
 
-      ReactNativeBleLibraryModule.cancel(transactionId)
+      getNativeModule()
+        .cancel(transactionId)
         .then(() => {
           this.logger?.info(`Cancelled transaction ${transactionId}`)
         })
@@ -244,7 +252,7 @@ export class NativeBleManager implements BleManager {
     let progressSubscription: EventSubscription | undefined
 
     if (progress !== undefined) {
-      progressSubscription = ReactNativeBleLibraryModule.addListener('onProgress', data => {
+      progressSubscription = getNativeModule().addListener('onProgress', data => {
         if (data.transactionId === transactionId) {
           this.logger?.info('[BleManager] write progress', data)
 
@@ -254,7 +262,7 @@ export class NativeBleManager implements BleManager {
     }
 
     try {
-      await ReactNativeBleLibraryModule.write(
+      await getNativeModule().write(
         transactionId,
         service,
         characteristic,
@@ -281,7 +289,7 @@ export class NativeBleManager implements BleManager {
 
     this.ensureInitialized()
 
-    const subscription = ReactNativeBleLibraryModule.addListener('onCharValueChanged', data => {
+    const subscription = getNativeModule().addListener('onCharValueChanged', data => {
       if (data.characteristic === characteristic && data.service === service) {
         this.logger?.info('[BleManager] char value changed', data)
 
@@ -294,7 +302,8 @@ export class NativeBleManager implements BleManager {
     if (nSubscriptions === 0) {
       this.logger?.info(`[BleManager] execute subscribe(${characteristic})`)
 
-      ReactNativeBleLibraryModule.subscribe(this.getTransactionId(), service, characteristic)
+      getNativeModule()
+        .subscribe(this.getTransactionId(), service, characteristic)
         .then(() => {
           this.logger?.info('[BleManager] subscribed to ', characteristic)
           this.nSubscriptions.set(key, nSubscriptions + 1)
@@ -317,7 +326,8 @@ export class NativeBleManager implements BleManager {
         const nSub = this.nSubscriptions.get(key) ?? 0
         if (nSub === 1) {
           this.nSubscriptions.set(key, 0)
-          ReactNativeBleLibraryModule.unsubscribe(this.getTransactionId(), service, characteristic)
+          getNativeModule()
+            .unsubscribe(this.getTransactionId(), service, characteristic)
             .then(() => {
               this.logger?.info('[BleManager] unsubscribed from ', characteristic)
             })
@@ -343,7 +353,7 @@ export class NativeBleManager implements BleManager {
     const transactionId = this.getTransactionId()
 
     try {
-      return ReactNativeBleLibraryModule.readRSSI(transactionId)
+      return getNativeModule().readRSSI(transactionId)
     } catch (e: any) {
       throw new BleError(e.code, e.message)
     }
@@ -352,7 +362,7 @@ export class NativeBleManager implements BleManager {
   dispose(): void {
     if (this.initialized) {
       this.logger?.info('[BleManager] terminating manager')
-      ReactNativeBleLibraryModule.disposeModule()
+      getNativeModule().disposeModule()
       this.initialized = false
       this.nSubscriptions.clear()
     }
