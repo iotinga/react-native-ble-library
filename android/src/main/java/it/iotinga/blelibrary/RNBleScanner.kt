@@ -13,7 +13,7 @@ class RNBleScanner(
   sendEvent: (event: Event, payload: Map<String, Any>) -> Unit
 ) {
   private val scanCallback = BleScanCallback(sendEvent)
-  private val scanner = adapter.bluetoothLeScanner
+  private val scanner = adapter.bluetoothLeScanner ?: throw IllegalStateException("Bluetooth LE scanner unavailable")
   private var isActive = false
 
   @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
